@@ -56,12 +56,3 @@ def validar_ventas_sii(path_csv, tolerancia=1):
         })
 
     return pd.DataFrame(resultados)
-
-# ==========================================
-# Ejecución del archivo
-# ==========================================
-
-resultado_validacion = validar_ventas_sii("/mnt/data/Ventas Dic25.csv")
-
-resultado_validacion.head()
-
