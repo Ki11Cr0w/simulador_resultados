@@ -199,14 +199,29 @@ if st.button("Ver resultado"):
     c2.metric("Gastos", f"${total_gastos:,.0f}")
     c3.metric("Resultado", f"${resultado_final:,.0f}")
 
-    fig1, ax1 = plt.subplots()
+# =========================
+# Gráfico de torta (seguro)
+# =========================
+
+fig1, ax1 = plt.subplots()
+
+valores_pie = [
+    max(total_ingresos, 0),
+    max(total_gastos, 0)
+]
+
+if sum(valores_pie) > 0:
     ax1.pie(
-        [total_ingresos, total_gastos],
+        valores_pie,
         labels=["Ingresos", "Gastos"],
         autopct="%1.0f%%",
         startangle=90
     )
+    ax1.set_title("Distribución Ingresos vs Gastos")
     st.pyplot(fig1)
+else:
+    st.info("No hay datos suficientes para mostrar el gráfico de torta.")
+
 
     fig2, ax2 = plt.subplots()
     ax2.bar(periodos, resultados)
