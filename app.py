@@ -61,9 +61,10 @@ def normalizar_compras(df):
         tipo_doc = int(fila.get("tipo_documento", 0) or 0)
         factor = -1 if tipo_doc == 61 else 1
 
-        neto = fila.get("monto_neto", 0) or 0
-        exento = fila.get("monto_exento", 0) or 0
-        total = fila.get("monto_total", neto + exento) or 0
+        neto = float(fila.get("monto_neto", 0) or 0)
+        exento = float(fila.get("monto_exento", 0) or 0)
+        total = fila.get("monto_total", neto + exento)
+        total = float(total) if pd.notna(total) else neto + exento
 
         documentos.append({
             "fecha": fila.get("fecha_docto", ""),
