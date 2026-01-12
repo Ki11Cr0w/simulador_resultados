@@ -10,57 +10,68 @@ from collections import defaultdict
 from validaciones import validar_ventas_sii
 
 # ==========================================
-# VALIDACION DE FORMATO INTERNO
+# CONFIG APP
 # ==========================================
-def normalizar_ventas(df_ventas):
+st.set_page_config(page_title="Simulador de Resultado", layout="centered")
+st.title("Simulador de Resultado")
+
+# ==========================================
+# CARGA ARCHIVO
+# ==========================================
+archivo = st.file_uploader("Cargar Ventas SII", type="csv")
+documentos = []
+
+# ==========================================
+# NORMALIZACIÓN
+# ==========================================
+def normalizar_columnas(df):
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+    )
+    return df
+
+
+def normalizar_ventas(df):
     documentos = []
 
-    for _, fila in df_ventas.iterrows():
-        tipo_doc = int(fila["Tipo Documento"]) if not pd.isna(fila["Tipo Documento"]) else 0
+    for _, fila in df.iterrows():
+        tipo_doc = int(fila.get("tipo_documento", 0) or 0)
         factor = -1 if tipo_doc == 61 else 1
 
-        neto = fila["Monto Neto"] if not pd.isna(fila["Monto Neto"]) else 0
-        total = fila["Monto Total"] if not pd.isna(fila["Monto Total"]) else 0
-
         documentos.append({
-            "fecha": fila["Fecha Emisión"],
+            "fecha": fila.get("fecha_emision", ""),
             "tipo": "ingreso",
-            "neto": neto * factor,
-            "total": total * factor
+            "neto": (fila.get("monto_neto", 0) or 0) * factor,
+            "total": (fila.get("monto_total", 0) or 0) * factor,
         })
 
     return documentos
 
+
 # ==========================================
-# DATOS DE CARGA POR EL SII
+# PROCESAMIENTO
 # ==========================================
-
-archivo = st.file_uploader("Cargar Ventas SII", type="csv")
-
-documentos = []
-
 if archivo:
     df_ventas = pd.read_csv(archivo)
+    df_ventas = normalizar_columnas(df_ventas)
 
     df_validado = validar_ventas_sii(df_ventas)
     df_validos = df_validado[df_validado["valido"] == True]
 
     documentos = normalizar_ventas(df_validos)
 
-    st.success(f"Ventas cargadas correctamente: {len(documentos)} documentos válidos")
+    st.success(f"Documentos válidos: {len(documentos)}")
 
 # ==========================================
-# MOTOR DE CÁLCULO
+# MOTOR CÁLCULO
 # ==========================================
-
 def calcular_resultados(documentos, tipo_periodo="mensual"):
     resumen = defaultdict(lambda: {
         "ingresos_neto": 0,
         "ingresos_total": 0,
-        "gastos_neto": 0,
-        "gastos_total": 0,
-        "honorarios_neto": 0,
-        "honorarios_total": 0,
     })
 
     for d in documentos:
@@ -73,44 +84,17 @@ def calcular_resultados(documentos, tipo_periodo="mensual"):
         else:
             periodo = d["fecha"][:4]
 
-        if d["tipo"] == "ingreso":
-            resumen[periodo]["ingresos_neto"] += d["neto"]
-            resumen[periodo]["ingresos_total"] += d["total"]
-
-        elif d["tipo"] == "gasto":
-            resumen[periodo]["gastos_neto"] += d["neto"]
-            resumen[periodo]["gastos_total"] += d["total"]
-
-        elif d["tipo"] == "honorario":
-            resumen[periodo]["honorarios_neto"] += d["neto"]
-            resumen[periodo]["honorarios_total"] += d["total"]
+        resumen[periodo]["ingresos_neto"] += d["neto"]
+        resumen[periodo]["ingresos_total"] += d["total"]
 
     return dict(resumen)
 
 # ==========================================
-# APP WEB
+# UI
 # ==========================================
+periodo_ui = st.selectbox("Periodo", ["Mensual", "Trimestral", "Anual"])
 
-st.set_page_config(page_title="Simulador de Resultado", layout="centered")
-
-st.title("📊 Simulador de Resultado")
-st.write("Una visión simple para entender cómo va tu negocio")
-
-tipo_analisis_ui = st.radio(
-    "¿Cómo quieres ver los números?",
-    [
-        "Resultado del negocio (sin impuestos)",
-        "Movimiento de dinero (con impuestos)"
-    ]
-)
-
-periodo_ui = st.selectbox(
-    "Periodo de análisis",
-    ["Mensual", "Trimestral", "Anual"]
-)
-
-if st.button("Ver resultado"):
-    tipo_analisis = "negocio" if "negocio" in tipo_analisis_ui else "caja"
+if st.button("Ver resultado") and documentos:
     periodo_map = {
         "Mensual": "mensual",
         "Trimestral": "trimestral",
@@ -118,53 +102,14 @@ if st.button("Ver resultado"):
     }
 
     resumen = calcular_resultados(documentos, periodo_map[periodo_ui])
-    periodos = sorted(resumen.keys())
 
-    resultados = []
-    total_ingresos = 0
-    total_gastos = 0
+    total_neto = sum(v["ingresos_neto"] for v in resumen.values())
+    total_total = sum(v["ingresos_total"] for v in resumen.values())
 
-    for p in periodos:
-        d = resumen[p]
+    st.metric("Resultado Neto", f"${total_neto:,.0f}")
+    st.metric("Movimiento Total", f"${total_total:,.0f}")
 
-        if tipo_analisis == "negocio":
-            ingresos = d["ingresos_neto"]
-            gastos = d["gastos_neto"] + d["honorarios_neto"]
-        else:
-            ingresos = d["ingresos_total"]
-            gastos = d["gastos_total"] + d["honorarios_total"]
-
-        total_ingresos += ingresos
-        total_gastos += gastos
-        resultados.append(ingresos - gastos)
-
-    resultado_final = total_ingresos - total_gastos
-
-    st.subheader("📌 Resumen general")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Entradas", f"${total_ingresos:,.0f}")
-    col2.metric("Salidas", f"${total_gastos:,.0f}")
-    col3.metric("Resultado", f"${resultado_final:,.0f}")
-
-    # Gráfico de torta
-    fig1, ax1 = plt.subplots()
-    ax1.pie(
-        [total_ingresos, total_gastos],
-        labels=["Ingresos", "Gastos"],
-        autopct="%1.0f%%",
-        startangle=90
-    )
-    ax1.set_title("Equilibrio del negocio")
-    st.pyplot(fig1)
-
-    # Gráfico de barras
-    fig2, ax2 = plt.subplots()
-    ax2.bar(periodos, resultados)
-    ax2.set_title("Resultado por periodo")
-    ax2.set_ylabel("Resultado")
-    ax2.tick_params(axis="x", rotation=45)
-
-    for i, valor in enumerate(resultados):
-        ax2.text(i, valor, f"${valor:,.0f}", ha="center", va="bottom")
-
-    st.pyplot(fig2)
+    fig, ax = plt.subplots()
+    ax.bar(resumen.keys(), [v["ingresos_neto"] for v in resumen.values()])
+    ax.set_title("Resultado por periodo")
+    st.pyplot(fig)
