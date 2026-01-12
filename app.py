@@ -3,7 +3,7 @@
 # ==========================
 import streamlit as st
 import pandas as pd
-from validaciones import validar_documentos
+from validaciones import validar_documentos  # asegúrate que validaciones.py esté en el mismo directorio
 
 st.set_page_config(page_title="Simulador de Resultados SII", layout="wide")
 
