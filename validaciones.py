@@ -1,5 +1,5 @@
 # ==========================================
-# VALIDACIONES.PY - ACTUALIZADO CON IVA RECUPERABLE
+# VALIDACIONES.PY - VERSIÓN COMPLETA
 # ==========================================
 
 import pandas as pd
@@ -18,25 +18,33 @@ def _calcular_total_fila(fila, tipo_doc, es_compra=False):
     """Calcula el total de una fila según tipo de documento."""
     factor = -1 if tipo_doc == 61 else 1
     
+    # Obtener montos base
     neto = fila.get('monto_neto', 0)
     exento = fila.get('monto_exento', 0)
     iva = fila.get('monto_iva', 0)
     
-    # Para compras, buscar IVA recuperable
+    # Para compras: buscar IVA recuperable y otros impuestos
+    otros_impuestos = 0
+    
+    # Buscar columnas de otros impuestos
+    for col in fila.index:
+        if 'valor_otro_imp' in col.lower():
+            otros_impuestos += fila[col]
+    
+    # Para compras, agregar IVA recuperable al IVA total
     if es_compra:
         iva_recuperable = fila.get('monto_iva_recuperable', 0)
         iva += iva_recuperable
     
-    otros_impuestos = sum(fila[col] for col in fila.index 
-                         if col.startswith('iva') and col != 'monto_iva')
-    
-    if 'valor_otro_imp' in fila.index:
-        otros_impuestos += fila.get('valor_otro_imp', 0)
+    # Sumar otros impuestos de tipo IVA (excepto monto_iva principal)
+    for col in fila.index:
+        if col.startswith('iva') and col != 'monto_iva' and not col.startswith('monto_iva_recuperable'):
+            otros_impuestos += fila[col]
     
     total_calculado = (neto + exento + iva + otros_impuestos) * factor
     total_informado = fila.get('monto_total', 0) * factor
     
-    return total_calculado, total_informado
+    return total_calculado, total_informado, otros_impuestos
 
 
 def validar_documentos(df, tolerancia=1, es_compra=False):
@@ -53,16 +61,19 @@ def validar_documentos(df, tolerancia=1, es_compra=False):
     # Calcular diferencias
     calculados = []
     informados = []
+    otros_impuestos_list = []
     
     for _, fila in df.iterrows():
         tipo_doc = int(fila.get('tipo_documento', 0) or 0)
-        calc, info = _calcular_total_fila(fila, tipo_doc, es_compra)
+        calc, info, otros = _calcular_total_fila(fila, tipo_doc, es_compra)
         calculados.append(calc)
         informados.append(info)
+        otros_impuestos_list.append(otros)
     
     # Agregar resultados
     df['total_calculado'] = calculados
     df['total_informado'] = informados
+    df['otros_impuestos'] = otros_impuestos_list
     df['diferencia'] = np.round(df['total_calculado'] - df['total_informado'], 2)
     df['valido'] = df['diferencia'].abs() <= tolerancia
     
