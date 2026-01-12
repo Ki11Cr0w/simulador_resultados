@@ -41,10 +41,13 @@ def normalizar_ventas(df):
         tipo_doc = int(fila.get("tipo_documento", 0) or 0)
         factor = -1 if tipo_doc == 61 else 1
 
+        neto = (fila.get("monto_neto", 0) or 0) * factor
+        exento = (fila.get("monto_exento", 0) or 0) * factor
+
         documentos.append({
             "fecha": fila.get("fecha_docto", ""),
             "tipo": "ingreso",
-            "neto": (fila.get("monto_neto", 0) or 0) * factor,
+            "neto": neto + exento,
             "total": (fila.get("monto_total", 0) or 0) * factor,
         })
 
@@ -58,10 +61,13 @@ def normalizar_compras(df):
         tipo_doc = int(fila.get("tipo_documento", 0) or 0)
         factor = -1 if tipo_doc == 61 else 1
 
+        neto = (fila.get("monto_neto", 0) or 0) * factor
+        exento = (fila.get("monto_exento", 0) or 0) * factor
+
         documentos.append({
             "fecha": fila.get("fecha_docto", ""),
             "tipo": "gasto",
-            "neto": (fila.get("monto_neto", 0) or 0) * factor,
+            "neto": neto + exento,
             "total": (fila.get("monto_total", 0) or 0) * factor,
         })
 
@@ -118,24 +124,11 @@ if archivo_ventas:
     df_ventas = pd.read_csv(archivo_ventas, sep=";", decimal=",")
     df_ventas = normalizar_columnas(df_ventas)
 
-    st.subheader("🔎 Diagnóstico Ventas – Datos crudos")
-    st.write(df_ventas.head())
-    st.write("Columnas:", list(df_ventas.columns))
-
     df_ventas_val = validar_ventas_sii(df_ventas)
-
-    st.subheader("✅ Resultado Validación Ventas")
-    st.write(df_ventas_val["valido"].value_counts())
-
-    st.subheader("📄 Detalle Ventas (primeras 20)")
-    st.dataframe(df_ventas_val.head(20))
-
     df_ventas_ok = df_ventas_val[df_ventas_val["valido"] == True]
 
     documentos += normalizar_ventas(df_ventas_ok)
-
     st.success(f"Ventas válidas cargadas: {len(df_ventas_ok)}")
-
 
 # -------- COMPRAS --------
 st.subheader("📤 Compras SII")
@@ -149,7 +142,6 @@ if archivo_compras:
     df_compras_ok = df_compras_val[df_compras_val["valido"] == True]
 
     documentos += normalizar_compras(df_compras_ok)
-
     st.success(f"Compras válidas cargadas: {len(df_compras_ok)}")
 
 # ==========================================
@@ -210,24 +202,11 @@ if st.button("Ver resultado"):
     c2.metric("Gastos", f"${total_gastos:,.0f}")
     c3.metric("Resultado", f"${resultado_final:,.0f}")
 
-    # =========================
-    # Gráfico de torta (seguro)
-    # =========================
-
     fig1, ax1 = plt.subplots()
-
-    valores_pie = [
-        max(total_ingresos, 0),
-        max(total_gastos, 0)
-    ]
+    valores_pie = [max(total_ingresos, 0), max(total_gastos, 0)]
 
     if sum(valores_pie) > 0:
-        ax1.pie(
-            valores_pie,
-            labels=["Ingresos", "Gastos"],
-            autopct="%1.0f%%",
-            startangle=90
-        )
+        ax1.pie(valores_pie, labels=["Ingresos", "Gastos"], autopct="%1.0f%%", startangle=90)
         ax1.set_title("Distribución Ingresos vs Gastos")
         st.pyplot(fig1)
     else:
@@ -238,4 +217,3 @@ if st.button("Ver resultado"):
     ax2.set_title("Resultado por periodo")
     ax2.tick_params(axis="x", rotation=45)
     st.pyplot(fig2)
-
