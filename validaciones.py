@@ -1,5 +1,5 @@
 # ==========================================
-# VALIDACIONES.PY - VERSIÓN MEJORADA
+# VALIDACIONES.PY - ACTUALIZADO CON IVA RECUPERABLE
 # ==========================================
 
 import pandas as pd
@@ -14,13 +14,18 @@ def _clean_numeric_column(serie):
     return pd.to_numeric(serie, errors='coerce').fillna(0)
 
 
-def _calcular_total_fila(fila, tipo_doc):
+def _calcular_total_fila(fila, tipo_doc, es_compra=False):
     """Calcula el total de una fila según tipo de documento."""
     factor = -1 if tipo_doc == 61 else 1
     
     neto = fila.get('monto_neto', 0)
     exento = fila.get('monto_exento', 0)
     iva = fila.get('monto_iva', 0)
+    
+    # Para compras, buscar IVA recuperable
+    if es_compra:
+        iva_recuperable = fila.get('monto_iva_recuperable', 0)
+        iva += iva_recuperable
     
     otros_impuestos = sum(fila[col] for col in fila.index 
                          if col.startswith('iva') and col != 'monto_iva')
@@ -34,7 +39,7 @@ def _calcular_total_fila(fila, tipo_doc):
     return total_calculado, total_informado
 
 
-def validar_documentos(df, tolerancia=1):
+def validar_documentos(df, tolerancia=1, es_compra=False):
     """Valida coherencia entre montos en documentos."""
     df = df.copy()
     
@@ -51,7 +56,7 @@ def validar_documentos(df, tolerancia=1):
     
     for _, fila in df.iterrows():
         tipo_doc = int(fila.get('tipo_documento', 0) or 0)
-        calc, info = _calcular_total_fila(fila, tipo_doc)
+        calc, info = _calcular_total_fila(fila, tipo_doc, es_compra)
         calculados.append(calc)
         informados.append(info)
     
@@ -66,9 +71,9 @@ def validar_documentos(df, tolerancia=1):
 
 def validar_ventas_sii(df, tolerancia=1):
     """Valida documentos de ventas."""
-    return validar_documentos(df, tolerancia)
+    return validar_documentos(df, tolerancia, es_compra=False)
 
 
 def validar_compras_sii(df, tolerancia=1):
     """Valida documentos de compras."""
-    return validar_documentos(df, tolerancia)
+    return validar_documentos(df, tolerancia, es_compra=True)
