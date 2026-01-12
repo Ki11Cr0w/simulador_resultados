@@ -51,10 +51,10 @@ if archivo:
 # ==========================================
 # Boton de Validacion
 # ==========================================
-if st.button("Ver resultado"):
-    if not documentos:
-        st.warning("Primero debes cargar el archivo de Ventas SII")
-        st.stop()
+#if st.button("Ver resultado"):
+#    if not documentos:
+#        st.warning("Primero debes cargar el archivo de Ventas SII")
+#        st.stop()
 
 # ==========================================
 # MOTOR DE CÁLCULO
