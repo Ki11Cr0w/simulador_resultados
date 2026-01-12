@@ -115,7 +115,7 @@ st.subheader("📥 Ventas SII")
 archivo_ventas = st.file_uploader("Cargar Ventas", type="csv")
 
 if archivo_ventas:
-    df_ventas = pd.read_csv(archivo_ventas)
+    df_ventas = pd.read_csv(archivo_ventas, sep=";", decimal=",")
     df_ventas = normalizar_columnas(df_ventas)
 
     df_ventas_val = validar_ventas_sii(df_ventas)
@@ -130,7 +130,7 @@ st.subheader("📤 Compras SII")
 archivo_compras = st.file_uploader("Cargar Compras", type="csv")
 
 if archivo_compras:
-    df_compras = pd.read_csv(archivo_compras)
+    df_compras = pd.read_csv(archivo_compras, sep=";", decimal=",")
     df_compras = normalizar_columnas(df_compras)
 
     df_compras_val = validar_compras_sii(df_compras)
