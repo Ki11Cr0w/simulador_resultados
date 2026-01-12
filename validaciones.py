@@ -9,7 +9,7 @@ import pandas as pd
 # ==========================================
 
 def validar_ventas_sii(path_csv, tolerancia=1):
-    df = pd.read_csv(path_csv)
+#    df = pd.read_csv(path_csv)
 
     resultados = []
 
