@@ -3,64 +3,58 @@
 # ==========================================
 
 import streamlit as st
+import pandas as pd
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
+from validaciones import validar_ventas_sii
+
 # ==========================================
-# DATOS FICTICIOS (SIMULAN SII)
+# VALIDACION DE FORMATO INTERNO
+# ==========================================
+def normalizar_ventas(df_ventas):
+    documentos = []
+
+    for _, fila in df_ventas.iterrows():
+        tipo_doc = int(fila["Tipo Documento"]) if not pd.isna(fila["Tipo Documento"]) else 0
+        factor = -1 if tipo_doc == 61 else 1
+
+        neto = fila["Monto Neto"] if not pd.isna(fila["Monto Neto"]) else 0
+        total = fila["Monto Total"] if not pd.isna(fila["Monto Total"]) else 0
+
+        documentos.append({
+            "fecha": fila["Fecha Emisión"],
+            "tipo": "ingreso",
+            "neto": neto * factor,
+            "total": total * factor
+        })
+
+    return documentos
+
+# ==========================================
+# DATOS DE CARGA POR EL SII
 # ==========================================
 
-documentos = [
-    # ENERO
-    {"fecha": "2025-01-05", "tipo": "ingreso", "neto": 100000, "total": 119000},
-    {"fecha": "2025-01-15", "tipo": "gasto", "neto": 30000, "total": 35700},
-    {"fecha": "2025-01-20", "tipo": "honorario", "neto": 20000, "total": 20000},
+archivo = st.file_uploader("Cargar Ventas SII", type="csv")
 
-    # FEBRERO
-    {"fecha": "2025-02-04", "tipo": "ingreso", "neto": 120000, "total": 142800},
-    {"fecha": "2025-02-10", "tipo": "gasto", "neto": 35000, "total": 41650},
-    {"fecha": "2025-02-18", "tipo": "honorario", "neto": 25000, "total": 25000},
+documentos = []
 
-    # MARZO
-    {"fecha": "2025-03-03", "tipo": "ingreso", "neto": 110000, "total": 130900},
-    {"fecha": "2025-03-22", "tipo": "gasto", "neto": 40000, "total": 47600},
+if archivo:
+    df_ventas = pd.read_csv(archivo)
 
-    # ABRIL
-    {"fecha": "2025-04-05", "tipo": "ingreso", "neto": 130000, "total": 154700},
-    {"fecha": "2025-04-18", "tipo": "gasto", "neto": 45000, "total": 53550},
+    validacion = validar_ventas_sii(df_ventas)
+    df_validos = df_ventas[validacion["valido"] == True]
 
-    # MAYO
-    {"fecha": "2025-05-06", "tipo": "ingreso", "neto": 125000, "total": 148750},
-    {"fecha": "2025-05-15", "tipo": "honorario", "neto": 22000, "total": 22000},
+    documentos = normalizar_ventas(df_validos)
 
-    # JUNIO
-    {"fecha": "2025-06-02", "tipo": "ingreso", "neto": 140000, "total": 166600},
-    {"fecha": "2025-06-20", "tipo": "gasto", "neto": 50000, "total": 59500},
-
-    # JULIO
-    {"fecha": "2025-07-07", "tipo": "ingreso", "neto": 135000, "total": 160650},
-    {"fecha": "2025-07-18", "tipo": "gasto", "neto": 42000, "total": 49980},
-
-    # AGOSTO
-    {"fecha": "2025-08-03", "tipo": "ingreso", "neto": 145000, "total": 172550},
-    {"fecha": "2025-08-22", "tipo": "honorario", "neto": 24000, "total": 24000},
-
-    # SEPTIEMBRE
-    {"fecha": "2025-09-01", "tipo": "ingreso", "neto": 138000, "total": 164220},
-    {"fecha": "2025-09-19", "tipo": "gasto", "neto": 47000, "total": 55930},
-
-    # OCTUBRE
-    {"fecha": "2025-10-05", "tipo": "ingreso", "neto": 150000, "total": 178500},
-    {"fecha": "2025-10-21", "tipo": "gasto", "neto": 52000, "total": 61880},
-
-    # NOVIEMBRE
-    {"fecha": "2025-11-04", "tipo": "ingreso", "neto": 155000, "total": 184450},
-    {"fecha": "2025-11-18", "tipo": "honorario", "neto": 26000, "total": 26000},
-
-    # DICIEMBRE
-    {"fecha": "2025-12-02", "tipo": "ingreso", "neto": 160000, "total": 190400},
-    {"fecha": "2025-12-20", "tipo": "gasto", "neto": 60000, "total": 71400},
-]
+    st.success(f"Ventas cargadas correctamente: {len(documentos)} documentos válidos")
+# ==========================================
+# Boton de Validacion
+# ==========================================
+if st.button("Ver resultado"):
+    if not documentos:
+        st.warning("Primero debes cargar el archivo de Ventas SII")
+        st.stop()
 
 # ==========================================
 # MOTOR DE CÁLCULO
