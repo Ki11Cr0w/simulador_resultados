@@ -118,12 +118,24 @@ if archivo_ventas:
     df_ventas = pd.read_csv(archivo_ventas, sep=";", decimal=",")
     df_ventas = normalizar_columnas(df_ventas)
 
+    st.subheader("🔎 Diagnóstico Ventas – Datos crudos")
+    st.write(df_ventas.head())
+    st.write("Columnas:", list(df_ventas.columns))
+
     df_ventas_val = validar_ventas_sii(df_ventas)
+
+    st.subheader("✅ Resultado Validación Ventas")
+    st.write(df_ventas_val["valido"].value_counts())
+
+    st.subheader("📄 Detalle Ventas (primeras 20)")
+    st.dataframe(df_ventas_val.head(20))
+
     df_ventas_ok = df_ventas_val[df_ventas_val["valido"] == True]
 
     documentos += normalizar_ventas(df_ventas_ok)
 
     st.success(f"Ventas válidas cargadas: {len(df_ventas_ok)}")
+
 
 # -------- COMPRAS --------
 st.subheader("📤 Compras SII")
