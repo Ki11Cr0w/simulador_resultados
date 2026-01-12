@@ -6,6 +6,17 @@ import pandas as pd
 
 
 def _validar_documentos(df, tolerancia=1):
+    # Asegurar columnas numéricas
+    for col in df.columns:
+        if col.startswith("monto") or col.startswith("iva") or col in ["valor_otro_imp"]:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(".", "", regex=False)
+                .str.replace(",", ".", regex=False)
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
     resultados_valido = []
     resultados_diferencia = []
 
@@ -47,5 +58,3 @@ def validar_ventas_sii(df, tolerancia=1):
 
 def validar_compras_sii(df, tolerancia=1):
     return _validar_documentos(df, tolerancia)
-
-
