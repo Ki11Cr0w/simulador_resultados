@@ -5,14 +5,7 @@
 import pandas as pd
 
 
-def validar_ventas_sii(df, tolerancia=1):
-    """
-    Recibe DataFrame ya cargado desde Streamlit
-    Retorna el mismo DataFrame con columnas:
-    - valido
-    - diferencia
-    """
-
+def _validar_documentos(df, tolerancia=1):
     resultados_valido = []
     resultados_diferencia = []
 
@@ -42,9 +35,17 @@ def validar_ventas_sii(df, tolerancia=1):
         resultados_valido.append(valido)
         resultados_diferencia.append(diferencia)
 
-    df_resultado = df.copy()
-    df_resultado["valido"] = resultados_valido
-    df_resultado["diferencia"] = resultados_diferencia
+    df = df.copy()
+    df["valido"] = resultados_valido
+    df["diferencia"] = resultados_diferencia
+    return df
 
-    return df_resultado
+
+def validar_ventas_sii(df, tolerancia=1):
+    return _validar_documentos(df, tolerancia)
+
+
+def validar_compras_sii(df, tolerancia=1):
+    return _validar_documentos(df, tolerancia)
+
 
