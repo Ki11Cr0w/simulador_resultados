@@ -42,7 +42,7 @@ def normalizar_ventas(df):
         factor = -1 if tipo_doc == 61 else 1
 
         documentos.append({
-            "fecha": fila.get("fecha_emision", ""),
+            "fecha": fila.get("fecha_docto", ""),
             "tipo": "ingreso",
             "neto": (fila.get("monto_neto", 0) or 0) * factor,
             "total": (fila.get("monto_total", 0) or 0) * factor,
@@ -59,7 +59,7 @@ def normalizar_compras(df):
         factor = -1 if tipo_doc == 61 else 1
 
         documentos.append({
-            "fecha": fila.get("fecha_emision", ""),
+            "fecha": fila.get("fecha_docto", ""),
             "tipo": "gasto",
             "neto": (fila.get("monto_neto", 0) or 0) * factor,
             "total": (fila.get("monto_total", 0) or 0) * factor,
