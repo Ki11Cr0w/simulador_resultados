@@ -42,19 +42,12 @@ documentos = []
 if archivo:
     df_ventas = pd.read_csv(archivo)
 
-    validacion = validar_ventas_sii(df_ventas)
+    validacion = (df_ventas)
     df_validos = df_ventas[validacion["valido"] == True]
 
     documentos = normalizar_ventas(df_validos)
 
     st.success(f"Ventas cargadas correctamente: {len(documentos)} documentos válidos")
-# ==========================================
-# Boton de Validacion
-# ==========================================
-#if st.button("Ver resultado"):
-#    if not documentos:
-#        st.warning("Primero debes cargar el archivo de Ventas SII")
-#        st.stop()
 
 # ==========================================
 # MOTOR DE CÁLCULO
