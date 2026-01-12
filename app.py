@@ -60,18 +60,19 @@ def normalizar_compras(df):
     for _, fila in df.iterrows():
         tipo_doc = int(fila.get("tipo_documento", 0) or 0)
         factor = -1 if tipo_doc == 61 else 1
-
-        neto = (fila.get("monto_neto", 0) or 0) * factor
-        exento = (fila.get("monto_exento", 0) or 0) * factor
-
+    
+        neto = fila.get("monto_neto", 0) or 0
+        exento = fila.get("monto_exento", 0) or 0
+        total = fila.get("monto_total", neto + exento) or 0
+    
         documentos.append({
             "fecha": fila.get("fecha_docto", ""),
             "tipo": "gasto",
-            "neto": neto + exento,
-            "total": (fila.get("monto_total", 0) or 0) * factor,
-        })
-
-    return documentos
+            "neto": (neto + exento) * factor,
+            "total": total * factor,
+    })
+    
+return documentos
 
 # ==========================================
 # MOTOR DE CÁLCULO
