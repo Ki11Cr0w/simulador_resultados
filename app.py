@@ -42,8 +42,8 @@ documentos = []
 if archivo:
     df_ventas = pd.read_csv(archivo)
 
-    validacion = (df_ventas)
-    df_validos = df_ventas[validacion["valido"] == True]
+    df_validado = validar_ventas_sii(df_ventas)
+    df_validos = df_validado[df_validado["valido"] == True]
 
     documentos = normalizar_ventas(df_validos)
 
