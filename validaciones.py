@@ -1,5 +1,5 @@
 # ==========================================
-# VALIDACIONES.PY - VERSIÓN SIMPLE
+# VALIDACIONES.PY - VERSIÓN SIMPLE (sin cambios)
 # ==========================================
 
 import pandas as pd
@@ -10,11 +10,9 @@ def validar_ventas_sii(df, tolerancia=1):
     """Valida documentos de ventas."""
     df = df.copy()
     
-    # Solo validamos que existan las columnas necesarias
     if 'monto_total' not in df.columns or 'tipo_documento' not in df.columns:
         return df
     
-    # Convertir a numérico si es necesario
     if df['monto_total'].dtype == 'object':
         df['monto_total'] = (
             df['monto_total']
@@ -24,7 +22,6 @@ def validar_ventas_sii(df, tolerancia=1):
         )
         df['monto_total'] = pd.to_numeric(df['monto_total'], errors='coerce').fillna(0)
     
-    # Marcar todos como válidos para simplificar
     df['valido'] = True
     df['diferencia'] = 0
     
@@ -33,4 +30,4 @@ def validar_ventas_sii(df, tolerancia=1):
 
 def validar_compras_sii(df, tolerancia=1):
     """Valida documentos de compras."""
-    return validar_ventas_sii(df, tolerancia)  # Misma función para simplificar
+    return validar_ventas_sii(df, tolerancia)
