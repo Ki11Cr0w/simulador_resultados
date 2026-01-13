@@ -1,5 +1,5 @@
 # ==========================================
-# APP.PY - VERSIÓN CON COMPRAS Y BOTÓN DE CÁLCULO
+# APP.PY - VERSIÓN COMPLETA CON CÁLCULOS
 # ==========================================
 
 import streamlit as st
@@ -14,7 +14,7 @@ from validaciones import validar_ventas_sii, validar_compras_sii
 # ==========================================
 
 st.set_page_config(page_title="Simulador Simple", layout="centered")
-st.title("📊 Simulador Simple de Resultados")
+st.title("📊 Simulador de Resultados")
 
 # ==========================================
 # FUNCIONES AUXILIARES
@@ -78,7 +78,7 @@ def procesar_archivo(df, tipo_archivo):
             documentos.append({
                 'fecha': fecha_dt,
                 'monto': monto_total * factor,
-                'tipo': tipo_archivo,  # 'venta' o 'compra'
+                'tipo': tipo_archivo,
                 'tipo_doc': tipo_doc
             })
     
@@ -127,15 +127,18 @@ if ventas_file:
         else:
             documentos_ventas = procesar_archivo(df_ventas, 'venta')
             st.session_state.ventas_cargadas = documentos_ventas
-            st.success(f"✅ Ventas cargadas: {len(documentos_ventas)} documentos")
             
-            with st.expander("📊 Ver resumen ventas"):
-                st.write(f"Total documentos: {len(documentos_ventas)}")
-                if documentos_ventas:
-                    total_ventas = sum(d['monto'] for d in documentos_ventas)
-                    docs_61 = len([d for d in documentos_ventas if d['tipo_doc'] == 61])
-                    st.write(f"Total monto: ${total_ventas:,.0f}")
-                    st.write(f"Documentos tipo 61: {docs_61}")
+            # Mostrar resumen inmediato de ventas
+            if documentos_ventas:
+                total_ventas = sum(d['monto'] for d in documentos_ventas)
+                docs_61 = len([d for d in documentos_ventas if d['tipo_doc'] == 61])
+                
+                st.success(f"✅ Ventas cargadas: {len(documentos_ventas)} documentos")
+                st.info(f"📊 Total ventas: ${total_ventas:,.0f}")
+                
+                if docs_61 > 0:
+                    total_61 = sum(d['monto'] for d in documentos_ventas if d['tipo_doc'] == 61)
+                    st.info(f"📝 Notas de crédito (61): {docs_61} documentos (${total_61:,.0f})")
     
     except Exception as e:
         st.error(f"❌ Error al procesar ventas: {str(e)}")
@@ -168,40 +171,54 @@ if compras_file:
         else:
             documentos_compras = procesar_archivo(df_compras, 'compra')
             st.session_state.compras_cargadas = documentos_compras
-            st.success(f"✅ Compras cargadas: {len(documentos_compras)} documentos")
             
-            with st.expander("📊 Ver resumen compras"):
-                st.write(f"Total documentos: {len(documentos_compras)}")
-                if documentos_compras:
-                    total_compras = sum(d['monto'] for d in documentos_compras)
-                    docs_61 = len([d for d in documentos_compras if d['tipo_doc'] == 61])
-                    st.write(f"Total monto: ${total_compras:,.0f}")
-                    st.write(f"Documentos tipo 61: {docs_61}")
+            # Mostrar resumen inmediato de compras
+            if documentos_compras:
+                total_compras = sum(d['monto'] for d in documentos_compras)
+                docs_61 = len([d for d in documentos_compras if d['tipo_doc'] == 61])
+                
+                st.success(f"✅ Compras cargadas: {len(documentos_compras)} documentos")
+                st.info(f"📊 Total compras: ${total_compras:,.0f}")
+                
+                if docs_61 > 0:
+                    total_61 = sum(d['monto'] for d in documentos_compras if d['tipo_doc'] == 61)
+                    st.info(f"📝 Notas de crédito (61): {docs_61} documentos (${total_61:,.0f})")
     
     except Exception as e:
         st.error(f"❌ Error al procesar compras: {str(e)}")
 
 # ==========================================
-# BOTÓN DE CÁLCULO
+# BOTÓN DE CÁLCULO Y CONFIGURACIÓN
 # ==========================================
 st.markdown("---")
 
-# Verificar si ambos archivos están cargados
 ventas_cargadas = len(st.session_state.ventas_cargadas) > 0
 compras_cargadas = len(st.session_state.compras_cargadas) > 0
 
 if ventas_cargadas and compras_cargadas:
-    st.success("✅ Ambos archivos están cargados")
+    st.success("✅ Ambos archivos están cargados y listos para calcular")
     
-    # Selector de período
-    periodo = st.selectbox(
-        "Seleccionar período para agrupar:",
-        ["Mensual", "Trimestral", "Anual"],
-        key="periodo_select"
-    )
+    # Configuración de cálculo
+    st.markdown("### ⚙️ Configuración de Cálculos")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        periodo = st.selectbox(
+            "Período de agrupación:",
+            ["Mensual", "Trimestral", "Anual"],
+            key="periodo_select"
+        )
+    
+    with col2:
+        tipo_calculo = st.radio(
+            "Tipo de cálculo:",
+            ["Flujo de caja (ingresos - egresos)", "Rentabilidad (sin impuestos)"],
+            key="tipo_calculo"
+        )
     
     # Botón para calcular
-    if st.button("🚀 Calcular Resultados", type="primary", use_container_width=True):
+    if st.button("🚀 Calcular Resultados Completos", type="primary", use_container_width=True):
         st.session_state.mostrar_resultados = True
         st.rerun()
 
@@ -213,18 +230,27 @@ else:
     st.info("👈 Carga ambos archivos para habilitar los cálculos")
 
 # ==========================================
-# MOSTRAR RESULTADOS (solo después de click en botón)
+# CÁLCULOS COMPLETOS
 # ==========================================
 if st.session_state.mostrar_resultados and ventas_cargadas and compras_cargadas:
     st.markdown("---")
     st.subheader("📊 Resultados del Análisis")
     
-    # Combinar todos los documentos
+    # Combinar documentos
     todos_documentos = st.session_state.ventas_cargadas + st.session_state.compras_cargadas
     
-    # Calcular resultados por período
-    resumen = defaultdict(lambda: {'ventas': 0, 'compras': 0, 'resultado': 0})
+    # Cálculos por período
+    resumen = defaultdict(lambda: {
+        'ventas': 0, 
+        'compras': 0, 
+        'resultado': 0,
+        'ventas_positivas': 0,
+        'ventas_negativas': 0,
+        'compras_positivas': 0,
+        'compras_negativas': 0
+    })
     
+    # Agrupar por período
     for doc in todos_documentos:
         fecha = doc['fecha']
         
@@ -236,88 +262,176 @@ if st.session_state.mostrar_resultados and ventas_cargadas and compras_cargadas:
         else:
             clave = str(fecha.year)
         
+        monto = doc['monto']
+        
         if doc['tipo'] == 'venta':
-            resumen[clave]['ventas'] += doc['monto']
+            resumen[clave]['ventas'] += monto
+            if monto >= 0:
+                resumen[clave]['ventas_positivas'] += monto
+            else:
+                resumen[clave]['ventas_negativas'] += monto
         else:
-            resumen[clave]['compras'] += doc['monto']
+            resumen[clave]['compras'] += monto
+            if monto >= 0:
+                resumen[clave]['compras_positivas'] += monto
+            else:
+                resumen[clave]['compras_negativas'] += monto
     
-    # Calcular resultado
+    # Calcular resultados
     for clave in resumen:
         resumen[clave]['resultado'] = resumen[clave]['ventas'] - resumen[clave]['compras']
     
     # Ordenar periodos
-    periodos = sorted(resumen.keys())
-    ventas_totales = [resumen[p]['ventas'] for p in periodos]
-    compras_totales = [resumen[p]['compras'] for p in periodos]
-    resultados = [resumen[p]['resultado'] for p in periodos]
+    def ordenar_periodo(p):
+        if '-' in p and 'T' in p:
+            año, trim = p.split('-T')
+            return (int(año), int(trim))
+        elif '-' in p:
+            año, mes = p.split('-')
+            return (int(año), int(mes))
+        else:
+            return (int(p), 0)
+    
+    periodos = sorted(resumen.keys(), key=ordenar_periodo)
     
     # ==========================================
-    # MÉTRICAS GENERALES
+    # MÉTRICAS PRINCIPALES
     # ==========================================
-    st.markdown("### 📈 Métricas Generales")
+    st.markdown("### 🎯 Métricas Principales")
     
-    total_ventas = sum(ventas_totales)
-    total_compras = sum(compras_totales)
+    total_ventas = sum(resumen[p]['ventas'] for p in periodos)
+    total_compras = sum(resumen[p]['compras'] for p in periodos)
     total_resultado = total_ventas - total_compras
+    total_ventas_pos = sum(resumen[p]['ventas_positivas'] for p in periodos)
+    total_ventas_neg = sum(resumen[p]['ventas_negativas'] for p in periodos)
+    total_compras_pos = sum(resumen[p]['compras_positivas'] for p in periodos)
+    total_compras_neg = sum(resumen[p]['compras_negativas'] for p in periodos)
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Ventas", f"${total_ventas:,.0f}")
-    col2.metric("Total Compras", f"${total_compras:,.0f}")
-    col3.metric("Resultado", f"${total_resultado:,.0f}")
     
-    if total_ventas > 0:
-        margen = (total_resultado / total_ventas) * 100
-        col4.metric("Margen %", f"{margen:.1f}%")
-    else:
-        col4.metric("Margen %", "N/A")
+    col1.metric(
+        "Ventas Totales", 
+        f"${total_ventas:,.0f}",
+        f"${total_ventas_pos:,.0f} positivas" if total_ventas_pos > 0 else ""
+    )
+    
+    col2.metric(
+        "Compras Totales", 
+        f"${total_compras:,.0f}",
+        f"${total_compras_pos:,.0f} positivas" if total_compras_pos > 0 else ""
+    )
+    
+    col3.metric(
+        "Resultado Neto", 
+        f"${total_resultado:,.0f}",
+        f"{(total_resultado/total_ventas*100):.1f}%" if total_ventas > 0 else ""
+    )
+    
+    col4.metric(
+        "Documentos", 
+        f"{len(todos_documentos)}",
+        f"V:{len(st.session_state.ventas_cargadas)} C:{len(st.session_state.compras_cargadas)}"
+    )
     
     # ==========================================
-    # TABLA DETALLADA
+    # TABLA DE RESULTADOS POR PERÍODO
     # ==========================================
-    st.markdown("### 📋 Detalle por Período")
+    st.markdown("### 📋 Resultados por Período")
     
     df_resultados = pd.DataFrame({
         'Período': periodos,
-        'Ventas': ventas_totales,
-        'Compras': compras_totales,
-        'Resultado': resultados,
-        'Margen %': [r/v*100 if v > 0 else 0 for r, v in zip(resultados, ventas_totales)]
+        'Ventas': [resumen[p]['ventas'] for p in periodos],
+        'Compras': [resumen[p]['compras'] for p in periodos],
+        'Resultado': [resumen[p]['resultado'] for p in periodos],
+        'Margen %': [
+            (resumen[p]['resultado'] / resumen[p]['ventas'] * 100) if resumen[p]['ventas'] > 0 else 0 
+            for p in periodos
+        ]
     })
     
-    st.dataframe(df_resultados.style.format({
+    # Formatear tabla
+    styled_df = df_resultados.style.format({
         'Ventas': '${:,.0f}',
         'Compras': '${:,.0f}',
         'Resultado': '${:,.0f}',
         'Margen %': '{:.1f}%'
-    }))
+    })
+    
+    # Colorear resultados negativos
+    def color_negativos(val):
+        if isinstance(val, (int, float)) and val < 0:
+            return 'color: red'
+        return ''
+    
+    styled_df = styled_df.applymap(color_negativos, subset=['Resultado', 'Margen %'])
+    
+    st.dataframe(styled_df)
     
     # ==========================================
-    # ESTADÍSTICAS ADICIONALES
+    # ANÁLISIS DETALLADO
     # ==========================================
-    with st.expander("📊 Estadísticas Detalladas"):
-        col1, col2 = st.columns(2)
+    st.markdown("### 🔍 Análisis Detallado")
+    
+    # Estadísticas de ventas
+    with st.expander("📊 Análisis de Ventas"):
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("**📥 Ventas**")
-            st.write(f"- Documentos: {len(st.session_state.ventas_cargadas)}")
-            st.write(f"- Total: ${total_ventas:,.0f}")
-            
-            # Documentos tipo 61 en ventas
-            ventas_61 = [d for d in st.session_state.ventas_cargadas if d['tipo_doc'] == 61]
-            if ventas_61:
-                total_61 = sum(d['monto'] for d in ventas_61)
-                st.write(f"- Notas de crédito (61): {len(ventas_61)} (${total_61:,.0f})")
+            st.metric("Ventas Positivas", f"${total_ventas_pos:,.0f}")
+            st.metric("Ventas Negativas", f"${total_ventas_neg:,.0f}")
         
         with col2:
-            st.markdown("**📤 Compras**")
-            st.write(f"- Documentos: {len(st.session_state.compras_cargadas)}")
-            st.write(f"- Total: ${total_compras:,.0f}")
-            
-            # Documentos tipo 61 en compras
-            compras_61 = [d for d in st.session_state.compras_cargadas if d['tipo_doc'] == 61]
-            if compras_61:
-                total_61 = sum(d['monto'] for d in compras_61)
-                st.write(f"- Notas de crédito (61): {len(compras_61)} (${total_61:,.0f})")
+            ventas_sin_61 = total_ventas - total_ventas_neg
+            st.metric("Ventas sin notas crédito", f"${ventas_sin_61:,.0f}")
+        
+        with col3:
+            if total_ventas_pos > 0:
+                proporcion_negativas = abs(total_ventas_neg) / total_ventas_pos * 100
+                st.metric("% Notas Crédito", f"{proporcion_negativas:.1f}%")
+    
+    # Estadísticas de compras
+    with st.expander("📊 Análisis de Compras"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Compras Positivas", f"${total_compras_pos:,.0f}")
+            st.metric("Compras Negativas", f"${total_compras_neg:,.0f}")
+        
+        with col2:
+            compras_sin_61 = total_compras - total_compras_neg
+            st.metric("Compras sin notas crédito", f"${compras_sin_61:,.0f}")
+        
+        with col3:
+            if total_compras_pos > 0:
+                proporcion_negativas = abs(total_compras_neg) / total_compras_pos * 100
+                st.metric("% Notas Crédito", f"{proporcion_negativas:.1f}%")
+    
+    # ==========================================
+    # CÁLCULOS AVANZADOS
+    # ==========================================
+    st.markdown("### 🧮 Cálculos Avanzados")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Promedio mensual/trimestral/anual
+        if periodo == "Mensual":
+            st.metric("Promedio Mensual", f"${total_resultado/len(periodos):,.0f}")
+        elif periodo == "Trimestral":
+            st.metric("Promedio Trimestral", f"${total_resultado/len(periodos):,.0f}")
+        else:
+            st.metric("Promedio Anual", f"${total_resultado/len(periodos):,.0f}")
+    
+    with col2:
+        # Mejor y peor período
+        mejor_periodo = periodos[df_resultados['Resultado'].idxmax()]
+        mejor_resultado = df_resultados['Resultado'].max()
+        st.metric("Mejor Período", f"{mejor_periodo}", f"${mejor_resultado:,.0f}")
+    
+    with col3:
+        peor_periodo = periodos[df_resultados['Resultado'].idxmin()]
+        peor_resultado = df_resultados['Resultado'].min()
+        st.metric("Peor Período", f"{peor_periodo}", f"${peor_resultado:,.0f}")
     
     # ==========================================
     # RESUMEN POR AÑO (si no es anual)
@@ -325,33 +439,77 @@ if st.session_state.mostrar_resultados and ventas_cargadas and compras_cargadas:
     if periodo != "Anual":
         st.markdown("### 📅 Resumen Anual")
         
-        # Agrupar por año
-        resumen_anual = defaultdict(lambda: {'ventas': 0, 'compras': 0})
+        resumen_anual = defaultdict(lambda: {'ventas': 0, 'compras': 0, 'resultado': 0})
         
-        for doc in todos_documentos:
-            año = doc['fecha'].year
-            if doc['tipo'] == 'venta':
-                resumen_anual[año]['ventas'] += doc['monto']
-            else:
-                resumen_anual[año]['compras'] += doc['monto']
+        for p in periodos:
+            año = p.split('-')[0]
+            resumen_anual[año]['ventas'] += resumen[p]['ventas']
+            resumen_anual[año]['compras'] += resumen[p]['compras']
+            resumen_anual[año]['resultado'] += resumen[p]['resultado']
         
         años = sorted(resumen_anual.keys())
+        
         df_anual = pd.DataFrame({
             'Año': años,
             'Ventas': [resumen_anual[a]['ventas'] for a in años],
             'Compras': [resumen_anual[a]['compras'] for a in años],
-            'Resultado': [resumen_anual[a]['ventas'] - resumen_anual[a]['compras'] for a in años]
+            'Resultado': [resumen_anual[a]['resultado'] for a in años],
+            'Crecimiento Ventas': [
+                ((resumen_anual[años[i]]['ventas'] / resumen_anual[años[i-1]]['ventas'] - 1) * 100) 
+                if i > 0 and resumen_anual[años[i-1]]['ventas'] > 0 else 0
+                for i in range(len(años))
+            ]
         })
         
         st.dataframe(df_anual.style.format({
             'Ventas': '${:,.0f}',
             'Compras': '${:,.0f}',
-            'Resultado': '${:,.0f}'
+            'Resultado': '${:,.0f}',
+            'Crecimiento Ventas': '{:.1f}%'
         }))
     
-    # Botón para reiniciar
+    # ==========================================
+    # ESTADÍSTICAS DE DOCUMENTOS
+    # ==========================================
+    st.markdown("### 📄 Estadísticas de Documentos")
+    
+    # Crear DataFrame con todos los documentos
+    df_documentos = pd.DataFrame(todos_documentos)
+    df_documentos['mes'] = df_documentos['fecha'].dt.month
+    df_documentos['año'] = df_documentos['fecha'].dt.year
+    df_documentos['trimestre'] = (df_documentos['mes'] - 1) // 3 + 1
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Documentos por tipo
+        ventas_count = len([d for d in todos_documentos if d['tipo'] == 'venta'])
+        compras_count = len([d for d in todos_documentos if d['tipo'] == 'compra'])
+        st.metric("Ventas", ventas_count)
+        st.metric("Compras", compras_count)
+    
+    with col2:
+        # Documentos tipo 61
+        ventas_61 = len([d for d in todos_documentos if d['tipo'] == 'venta' and d['tipo_doc'] == 61])
+        compras_61 = len([d for d in todos_documentos if d['tipo'] == 'compra' and d['tipo_doc'] == 61])
+        st.metric("Notas Crédito Ventas", ventas_61)
+        st.metric("Notas Crédito Compras", compras_61)
+    
+    with col3:
+        # Promedio por documento
+        if ventas_count > 0:
+            avg_venta = total_ventas / ventas_count
+            st.metric("Promedio Venta", f"${avg_venta:,.0f}")
+        
+        if compras_count > 0:
+            avg_compra = total_compras / compras_count
+            st.metric("Promedio Compra", f"${avg_compra:,.0f}")
+    
+    # ==========================================
+    # BOTÓN DE REINICIO
+    # ==========================================
     st.markdown("---")
-    if st.button("🔄 Realizar nuevo análisis", type="secondary"):
+    if st.button("🔄 Realizar nuevo análisis", type="secondary", use_container_width=True):
         st.session_state.ventas_cargadas = []
         st.session_state.compras_cargadas = []
         st.session_state.mostrar_resultados = False
@@ -359,4 +517,4 @@ if st.session_state.mostrar_resultados and ventas_cargadas and compras_cargadas:
 
 # Pie de página
 st.markdown("---")
-st.caption("Versión simple | Ventas + Compras | Botón de cálculo")
+st.caption("Simulador de Resultados | Versión completa sin gráficos")
