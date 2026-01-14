@@ -1,5 +1,5 @@
 # ==========================================
-# APP.PY - VERSIÓN CON MÚLTIPLES ARCHIVOS Y CONFIRMACIÓN DE PERÍODO
+# APP.PY - VERSIÓN CON PERÍODO POR ARCHIVO Y FORMATO MEJORADO
 # ==========================================
 
 import streamlit as st
@@ -53,7 +53,6 @@ def _parsear_fecha(fecha_str):
         except:
             continue
     
-    # Intentar extraer números
     try:
         numeros = ''.join(filter(str.isdigit, fecha_str))
         if len(numeros) >= 8:
@@ -69,25 +68,20 @@ def _convertir_monto(monto):
     if pd.isna(monto):
         return 0
     
-    # Si ya es numérico
     if isinstance(monto, (int, float)):
         return float(monto)
     
-    # Si es string, limpiarlo
     monto_str = str(monto).strip()
     
     if not monto_str or monto_str.lower() in ['nan', 'none', 'null']:
         return 0
     
-    # Remover puntos como separadores de miles
+    # Formato 1.000,00 -> 1000.00
     if '.' in monto_str and ',' in monto_str:
-        # Formato 1.000,00 -> quitar punto, cambiar coma por punto
         monto_str = monto_str.replace('.', '').replace(',', '.')
     elif ',' in monto_str:
-        # Formato 1000,00 -> cambiar coma por punto
         monto_str = monto_str.replace(',', '.')
     
-    # Remover símbolos de moneda
     monto_str = monto_str.replace('$', '').replace('€', '').replace('£', '').strip()
     
     try:
@@ -96,71 +90,65 @@ def _convertir_monto(monto):
         return 0
 
 
-def procesar_archivo(df, tipo_archivo, nombre_archivo=""):
-    """Procesa archivo de ventas o compras."""
-    documentos = []
+def _formatear_monto(monto):
+    """Formatea monto con separadores de miles."""
+    if monto == 0:
+        return "$0"
     
-    for idx, fila in df.iterrows():
-        # Tipo de documento
-        try:
-            tipo_doc_val = fila.get('tipo_documento', 0)
-            if pd.isna(tipo_doc_val):
-                tipo_doc = 0
-            else:
-                tipo_doc = int(float(tipo_doc_val))
-        except:
-            tipo_doc = 0
-        
-        factor = -1 if tipo_doc == 61 else 1
-        
-        # Monto total
-        monto_raw = fila.get('monto_total', 0)
-        monto_total = _convertir_monto(monto_raw)
-        
-        # Fecha
-        fecha_raw = fila.get('fecha_docto', '')
-        fecha_dt = _parsear_fecha(fecha_raw)
-        
-        if fecha_dt:
-            documentos.append({
-                'fecha': fecha_dt,
-                'monto': monto_total * factor,
-                'tipo': tipo_archivo,
-                'tipo_doc': tipo_doc,
-                'archivo_origen': nombre_archivo
-            })
+    signo = "-" if monto < 0 else ""
+    monto_abs = abs(monto)
     
-    return documentos
-
-
-def detectar_periodo_sugerido(documentos):
-    """Detecta automáticamente el período sugerido basado en las fechas."""
-    if not documentos:
-        return None, None, None
-    
-    fechas = [doc['fecha'] for doc in documentos if doc['fecha']]
-    
-    if not fechas:
-        return None, None, None
-    
-    fecha_min = min(fechas)
-    fecha_max = max(fechas)
-    
-    # Calcular rango de fechas
-    dias_diferencia = (fecha_max - fecha_min).days
-    
-    # Sugerir período basado en el rango
-    if dias_diferencia <= 90:  # 3 meses
-        periodo_sugerido = "Mensual"
-    elif dias_diferencia <= 365:  # 1 año
-        periodo_sugerido = "Trimestral"
+    if monto_abs >= 1_000_000_000:
+        return f"{signo}${monto_abs/1_000_000_000:,.2f} MM"
+    elif monto_abs >= 1_000_000:
+        return f"{signo}${monto_abs/1_000_000:,.2f} M"
+    elif monto_abs >= 1_000:
+        return f"{signo}${monto_abs:,.0f}"
     else:
-        periodo_sugerido = "Anual"
+        return f"{signo}${monto_abs:,.2f}"
+
+
+def detectar_periodo_predominante(fechas):
+    """Detecta el período que predomina (mes, trimestre o año)."""
+    if not fechas:
+        return None
     
-    # Detectar años presentes
-    años = sorted(set(fecha.year for fecha in fechas))
+    # Contar por mes, trimestre y año
+    contador_meses = defaultdict(int)
+    contador_trimestres = defaultdict(int)
+    contador_años = defaultdict(int)
     
-    return periodo_sugerido, fecha_min, fecha_max, años
+    for fecha in fechas:
+        mes_key = f"{fecha.year}-{fecha.month:02d}"
+        trimestre = (fecha.month - 1) // 3 + 1
+        trimestre_key = f"{fecha.year}-T{trimestre}"
+        año_key = str(fecha.year)
+        
+        contador_meses[mes_key] += 1
+        contador_trimestres[trimestre_key] += 1
+        contador_años[año_key] += 1
+    
+    # Encontrar el más común para cada nivel
+    mes_comun = max(contador_meses.items(), key=lambda x: x[1]) if contador_meses else (None, 0)
+    trimestre_comun = max(contador_trimestres.items(), key=lambda x: x[1]) if contador_trimestres else (None, 0)
+    año_comun = max(contador_años.items(), key=lambda x: x[1]) if contador_años else (None, 0)
+    
+    # Determinar qué nivel tiene mayor concentración
+    total_fechas = len(fechas)
+    concentracion_mes = mes_comun[1] / total_fechas if total_fechas > 0 else 0
+    concentracion_trimestre = trimestre_comun[1] / total_fechas if total_fechas > 0 else 0
+    concentracion_año = año_comun[1] / total_fechas if total_fechas > 0 else 0
+    
+    # Si hay alta concentración en un mes, sugerir mensual
+    if concentracion_mes >= 0.7:  # 70% o más en un mes
+        return "Mensual", mes_comun[0]
+    elif concentracion_trimestre >= 0.6:  # 60% o más en un trimestre
+        return "Trimestral", trimestre_comun[0]
+    elif concentracion_año >= 0.5:  # 50% o más en un año
+        return "Anual", año_comun[0]
+    else:
+        # Por defecto, usar mensual para detalle
+        return "Mensual", None
 
 
 # ==========================================
@@ -176,201 +164,116 @@ if 'archivos_ventas' not in st.session_state:
     st.session_state.archivos_ventas = {}
 if 'archivos_compras' not in st.session_state:
     st.session_state.archivos_compras = {}
-if 'periodo_seleccionado' not in st.session_state:
-    st.session_state.periodo_seleccionado = "Mensual"
+if 'periodos_confirmados' not in st.session_state:
+    st.session_state.periodos_confirmados = {}
 if 'mostrar_resultados' not in st.session_state:
     st.session_state.mostrar_resultados = False
 
 st.subheader("📥 Carga de Archivos Múltiples")
 
 # ==========================================
-# SECCIÓN VENTAS - MÚLTIPLES ARCHIVOS
+# FUNCIÓN PARA PROCESAR UN ARCHIVO INDIVIDUAL
 # ==========================================
-st.markdown("### 📋 Archivos de Ventas (máx. 3)")
-
-# Usar columnas para mostrar múltiples uploaders
-ventas_col1, ventas_col2, ventas_col3 = st.columns(3)
-
-archivos_ventas = []
-
-with ventas_col1:
-    ventas_file1 = st.file_uploader(
-        "Ventas 1",
-        type=["xlsx", "xls", "csv"],
-        key="ventas_uploader_1"
-    )
-    if ventas_file1:
-        archivos_ventas.append(ventas_file1)
-
-with ventas_col2:
-    ventas_file2 = st.file_uploader(
-        "Ventas 2",
-        type=["xlsx", "xls", "csv"],
-        key="ventas_uploader_2"
-    )
-    if ventas_file2:
-        archivos_ventas.append(ventas_file2)
-
-with ventas_col3:
-    ventas_file3 = st.file_uploader(
-        "Ventas 3", 
-        type=["xlsx", "xls", "csv"],
-        key="ventas_uploader_3"
-    )
-    if ventas_file3:
-        archivos_ventas.append(ventas_file3)
-
-# Procesar archivos de ventas
-if archivos_ventas:
-    documentos_ventas_totales = []
-    
-    for i, ventas_file in enumerate(archivos_ventas):
-        try:
-            if ventas_file.name.endswith('.csv'):
-                df_ventas = pd.read_csv(ventas_file, sep=';', decimal=',')
+def procesar_y_sugerir_periodo(archivo, tipo, numero):
+    """Procesa un archivo y sugiere período predominante."""
+    try:
+        if archivo.name.endswith('.csv'):
+            df = pd.read_csv(archivo, sep=';', decimal=',')
+        else:
+            df = pd.read_excel(archivo)
+        
+        df = normalizar_columnas(df)
+        
+        columnas_requeridas = ['fecha_docto', 'tipo_documento', 'monto_total']
+        columnas_faltantes = [c for c in columnas_requeridas if c not in df.columns]
+        
+        if columnas_faltantes:
+            st.error(f"❌ {tipo} {numero}: Faltan columnas {columnas_faltantes}")
+            return None
+        
+        # Procesar documentos
+        documentos = []
+        fechas_validas = []
+        
+        for idx, fila in df.iterrows():
+            # Tipo de documento
+            try:
+                tipo_doc_val = fila.get('tipo_documento', 0)
+                if pd.isna(tipo_doc_val):
+                    tipo_doc = 0
+                else:
+                    tipo_doc = int(float(tipo_doc_val))
+            except:
+                tipo_doc = 0
+            
+            factor = -1 if tipo_doc == 61 else 1
+            
+            # Monto total
+            monto_raw = fila.get('monto_total', 0)
+            monto_total = _convertir_monto(monto_raw)
+            
+            # Fecha
+            fecha_raw = fila.get('fecha_docto', '')
+            fecha_dt = _parsear_fecha(fecha_raw)
+            
+            if fecha_dt:
+                documentos.append({
+                    'fecha': fecha_dt,
+                    'monto': monto_total * factor,
+                    'tipo': tipo,
+                    'tipo_doc': tipo_doc,
+                    'archivo_origen': archivo.name,
+                    'numero_archivo': numero
+                })
+                fechas_validas.append(fecha_dt)
+        
+        if not documentos:
+            st.warning(f"⚠️ {tipo} {numero}: No se encontraron documentos con fecha válida")
+            return None
+        
+        # Detectar período predominante
+        periodo_sugerido, periodo_predominante = detectar_periodo_predominante(fechas_validas)
+        
+        # Mostrar información del archivo
+        st.success(f"✅ {tipo} {numero} procesado: {len(documentos)} documentos")
+        
+        with st.expander(f"📊 Información de {tipo} {numero}"):
+            # Estadísticas básicas
+            total_monto = sum(d['monto'] for d in documentos)
+            fechas = [d['fecha'] for d in documentos]
+            fecha_min = min(fechas)
+            fecha_max = max(fechas)
+            
+            st.write(f"**Nombre:** {archivo.name}")
+            st.write(f"**Documentos procesados:** {len(documentos)}")
+            st.write(f"**Total:** {_formatear_monto(total_monto)}")
+            st.write(f"**Rango de fechas:** {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
+            st.write(f"**Días cubiertos:** {(fecha_max - fecha_min).days}")
+            
+            # Sugerencia de período
+            st.write("---")
+            st.write("**🎯 SUGERENCIA DE PERÍODO:**")
+            
+            if periodo_predominante:
+                st.success(f"**{periodo_sugerido}** - Período predominante: **{periodo_predominante}**")
             else:
-                df_ventas = pd.read_excel(ventas_file)
+                st.info(f"**{periodo_sugerido}** - Datos distribuidos en múltiples períodos")
             
-            df_ventas = normalizar_columnas(df_ventas)
+            # Distribución por mes
+            meses = {}
+            for fecha in fechas:
+                mes_key = f"{fecha.year}-{fecha.month:02d}"
+                meses[mes_key] = meses.get(mes_key, 0) + 1
             
-            columnas_requeridas = ['fecha_docto', 'tipo_documento', 'monto_total']
-            columnas_faltantes = [c for c in columnas_requeridas if c not in df_ventas.columns]
-            
-            if columnas_faltantes:
-                st.error(f"❌ Archivo {i+1} de ventas: Faltan columnas {columnas_faltantes}")
-            else:
-                documentos = procesar_archivo(df_ventas, 'venta', ventas_file.name)
-                documentos_ventas_totales.extend(documentos)
-                
-                # Guardar en estado
-                st.session_state.archivos_ventas[ventas_file.name] = {
-                    'documentos': len(documentos),
-                    'procesado': True
-                }
-                
-                st.success(f"✅ Ventas {i+1} procesadas: {len(documentos)} documentos")
+            if meses:
+                st.write("**Distribución por mes:**")
+                for mes, count in sorted(meses.items()):
+                    porcentaje = (count / len(documentos)) * 100
+                    st.write(f"  - {mes}: {count} documentos ({porcentaje:.1f}%)")
         
-        except Exception as e:
-            st.error(f"❌ Error en archivo {i+1} de ventas: {str(e)}")
-    
-    st.session_state.documentos_ventas = documentos_ventas_totales
-    
-    if documentos_ventas_totales:
-        total_ventas = sum(d['monto'] for d in documentos_ventas_totales)
-        st.info(f"📊 Total ventas acumuladas: ${total_ventas:,.0f}")
-
-# ==========================================
-# SECCIÓN COMPRAS - MÚLTIPLES ARCHIVOS
-# ==========================================
-st.markdown("### 📋 Archivos de Compras (máx. 3)")
-
-# Usar columnas para mostrar múltiples uploaders
-compras_col1, compras_col2, compras_col3 = st.columns(3)
-
-archivos_compras = []
-
-with compras_col1:
-    compras_file1 = st.file_uploader(
-        "Compras 1",
-        type=["xlsx", "xls", "csv"],
-        key="compras_uploader_1"
-    )
-    if compras_file1:
-        archivos_compras.append(compras_file1)
-
-with compras_col2:
-    compras_file2 = st.file_uploader(
-        "Compras 2",
-        type=["xlsx", "xls", "csv"],
-        key="compras_uploader_2"
-    )
-    if compras_file2:
-        archivos_compras.append(compras_file2)
-
-with compras_col3:
-    compras_file3 = st.file_uploader(
-        "Compras 3",
-        type=["xlsx", "xls", "csv"],
-        key="compras_uploader_3"
-    )
-    if compras_file3:
-        archivos_compras.append(compras_file3)
-
-# Procesar archivos de compras
-if archivos_compras:
-    documentos_compras_totales = []
-    
-    for i, compras_file in enumerate(archivos_compras):
-        try:
-            if compras_file.name.endswith('.csv'):
-                df_compras = pd.read_csv(compras_file, sep=';', decimal=',')
-            else:
-                df_compras = pd.read_excel(compras_file)
-            
-            df_compras = normalizar_columnas(df_compras)
-            
-            columnas_requeridas = ['fecha_docto', 'tipo_documento', 'monto_total']
-            columnas_faltantes = [c for c in columnas_requeridas if c not in df_compras.columns]
-            
-            if columnas_faltantes:
-                st.error(f"❌ Archivo {i+1} de compras: Faltan columnas {columnas_faltantes}")
-            else:
-                documentos = procesar_archivo(df_compras, 'compra', compras_file.name)
-                documentos_compras_totales.extend(documentos)
-                
-                # Guardar en estado
-                st.session_state.archivos_compras[compras_file.name] = {
-                    'documentos': len(documentos),
-                    'procesado': True
-                }
-                
-                st.success(f"✅ Compras {i+1} procesadas: {len(documentos)} documentos")
-        
-        except Exception as e:
-            st.error(f"❌ Error en archivo {i+1} de compras: {str(e)}")
-    
-    st.session_state.documentos_compras = documentos_compras_totales
-    
-    if documentos_compras_totales:
-        total_compras = sum(d['monto'] for d in documentos_compras_totales)
-        st.info(f"📊 Total compras acumuladas: ${total_compras:,.0f}")
-
-# ==========================================
-# DETECCIÓN Y CONFIRMACIÓN DE PERÍODO
-# ==========================================
-st.markdown("---")
-
-# Combinar todos los documentos para análisis
-todos_documentos = st.session_state.documentos_ventas + st.session_state.documentos_compras
-
-if todos_documentos:
-    # Detectar período sugerido
-    periodo_sugerido, fecha_min, fecha_max, años = detectar_periodo_sugerido(todos_documentos)
-    
-    if periodo_sugerido:
-        st.markdown("### ⚙️ Configuración del Período de Análisis")
-        
-        # Mostrar información detectada
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Fecha más antigua", fecha_min.strftime('%d/%m/%Y'))
-        
-        with col2:
-            st.metric("Fecha más reciente", fecha_max.strftime('%d/%m/%Y'))
-        
-        with col3:
-            st.metric("Rango de días", (fecha_max - fecha_min).days)
-        
-        # Mostrar años detectados
-        st.info(f"📅 Años detectados en los datos: {', '.join(map(str, años))}")
-        
-        # Sugerencia del sistema
-        st.success(f"🔍 **Sugerencia del sistema:** Agrupar por **{periodo_sugerido}**")
-        st.caption(f"*Basado en el rango de fechas: {(fecha_max - fecha_min).days} días*")
-        
-        # Permitir confirmar o corregir
-        st.markdown("### 📊 ¿Cómo desea agrupar los datos?")
+        # Solicitar confirmación/corrección del período
+        st.write("---")
+        st.write(f"**⚙️ Configurar período para {tipo} {numero}:**")
         
         # Opciones de período
         periodo_opciones = ["Mensual", "Trimestral", "Anual"]
@@ -379,84 +282,157 @@ if todos_documentos:
         periodo_index = periodo_opciones.index(periodo_sugerido) if periodo_sugerido in periodo_opciones else 0
         
         periodo_seleccionado = st.radio(
-            "Seleccione el período de agrupación:",
+            f"Seleccione el período de agrupación para {tipo} {numero}:",
             periodo_opciones,
             index=periodo_index,
-            horizontal=True,
-            key="periodo_selector"
+            key=f"periodo_{tipo}_{numero}"
         )
         
-        # Guardar selección
-        st.session_state.periodo_seleccionado = periodo_seleccionado
+        # Guardar en estado
+        archivo_key = f"{tipo}_{numero}_{archivo.name}"
+        st.session_state.periodos_confirmados[archivo_key] = periodo_seleccionado
         
-        # Mostrar vista previa del agrupamiento
-        if st.button("👁️ Ver vista previa del agrupamiento", type="secondary"):
-            st.markdown("### 👁️ Vista Previa del Agrupamiento")
-            
-            # Agrupar para vista previa
-            conteo_por_periodo = defaultdict(int)
-            monto_por_periodo = defaultdict(float)
-            
-            for doc in todos_documentos:
-                fecha = doc['fecha']
-                
-                if periodo_seleccionado == "Mensual":
-                    clave = f"{fecha.year}-{fecha.month:02d}"
-                elif periodo_seleccionado == "Trimestral":
-                    trimestre = (fecha.month - 1) // 3 + 1
-                    clave = f"{fecha.year}-T{trimestre}"
-                else:
-                    clave = str(fecha.year)
-                
-                conteo_por_periodo[clave] += 1
-                monto_por_periodo[clave] += doc['monto']
-            
-            # Crear DataFrame para vista previa
-            periodos_vista = sorted(conteo_por_periodo.keys())
-            
-            df_vista = pd.DataFrame({
-                'Período': periodos_vista,
-                'Documentos': [conteo_por_periodo[p] for p in periodos_vista],
-                'Monto Total': [monto_por_periodo[p] for p in periodos_vista]
-            })
-            
-            st.dataframe(df_vista.style.format({
-                'Monto Total': '${:,.0f}'
-            }))
-            
-            st.info(f"📊 Se crearán {len(periodos_vista)} períodos de análisis")
-        
-        # ==========================================
-        # BOTÓN PARA CALCULAR
-        # ==========================================
-        st.markdown("---")
-        
-        if st.button("🚀 Calcular Resultados Completos", type="primary", use_container_width=True):
-            st.session_state.mostrar_resultados = True
-            st.rerun()
+        return documentos
+    
+    except Exception as e:
+        st.error(f"❌ Error procesando {tipo} {numero}: {str(e)}")
+        return None
+
 
 # ==========================================
-# CÁLCULOS COMPLETOS
+# SECCIÓN VENTAS - MÚLTIPLES ARCHIVOS CON PERÍODO INDIVIDUAL
+# ==========================================
+st.markdown("### 📋 Archivos de Ventas (máximo 3)")
+
+ventas_files = []
+ventas_documentos_totales = []
+
+# Uploaders para ventas
+ventas_cols = st.columns(3)
+for i in range(3):
+    with ventas_cols[i]:
+        ventas_file = st.file_uploader(
+            f"Ventas {i+1}",
+            type=["xlsx", "xls", "csv"],
+            key=f"ventas_uploader_{i+1}"
+        )
+        if ventas_file:
+            ventas_files.append((ventas_file, i+1))
+
+# Procesar cada archivo de ventas
+if ventas_files:
+    for ventas_file, numero in ventas_files:
+        documentos = procesar_y_sugerir_periodo(ventas_file, "venta", numero)
+        if documentos:
+            ventas_documentos_totales.extend(documentos)
+            
+            # Guardar en estado
+            st.session_state.archivos_ventas[ventas_file.name] = {
+                'documentos': len(documentos),
+                'numero': numero,
+                'procesado': True
+            }
+    
+    st.session_state.documentos_ventas = ventas_documentos_totales
+    
+    # Resumen de ventas
+    if ventas_documentos_totales:
+        total_ventas = sum(d['monto'] for d in ventas_documentos_totales)
+        st.info(f"**📊 VENTAS ACUMULADAS:** {_formatear_monto(total_ventas)} ({len(ventas_documentos_totales)} documentos)")
+
+# ==========================================
+# SECCIÓN COMPRAS - MÚLTIPLES ARCHIVOS CON PERÍODO INDIVIDUAL
+# ==========================================
+st.markdown("### 📋 Archivos de Compras (máximo 3)")
+
+compras_files = []
+compras_documentos_totales = []
+
+# Uploaders para compras
+compras_cols = st.columns(3)
+for i in range(3):
+    with compras_cols[i]:
+        compras_file = st.file_uploader(
+            f"Compras {i+1}",
+            type=["xlsx", "xls", "csv"],
+            key=f"compras_uploader_{i+1}"
+        )
+        if compras_file:
+            compras_files.append((compras_file, i+1))
+
+# Procesar cada archivo de compras
+if compras_files:
+    for compras_file, numero in compras_files:
+        documentos = procesar_y_sugerir_periodo(compras_file, "compra", numero)
+        if documentos:
+            compras_documentos_totales.extend(documentos)
+            
+            # Guardar en estado
+            st.session_state.archivos_compras[compras_file.name] = {
+                'documentos': len(documentos),
+                'numero': numero,
+                'procesado': True
+            }
+    
+    st.session_state.documentos_compras = compras_documentos_totales
+    
+    # Resumen de compras
+    if compras_documentos_totales:
+        total_compras = sum(d['monto'] for d in compras_documentos_totales)
+        st.info(f"**📊 COMPRAS ACUMULADAS:** {_formatear_monto(total_compras)} ({len(compras_documentos_totales)} documentos)")
+
+# ==========================================
+# CONFIGURACIÓN GLOBAL Y CÁLCULO
+# ==========================================
+st.markdown("---")
+
+# Combinar todos los documentos
+todos_documentos = st.session_state.documentos_ventas + st.session_state.documentos_compras
+
+if todos_documentos:
+    st.markdown("### ⚙️ Configuración Global del Análisis")
+    
+    # Determinar período global basado en los períodos confirmados
+    periodos_usados = list(st.session_state.periodos_confirmados.values())
+    
+    if periodos_usados:
+        # Usar el período más común entre los archivos
+        from collections import Counter
+        periodo_counter = Counter(periodos_usados)
+        periodo_global = periodo_counter.most_common(1)[0][0]
+    else:
+        periodo_global = "Mensual"  # Por defecto
+    
+    st.info(f"**📅 Período global sugerido:** **{periodo_global}** (basado en archivos cargados)")
+    
+    # Opción para cambiar el período global
+    periodo_final = st.selectbox(
+        "Período final para el análisis completo:",
+        ["Mensual", "Trimestral", "Anual"],
+        index=["Mensual", "Trimestral", "Anual"].index(periodo_global)
+    )
+    
+    # Botón para calcular
+    st.markdown("---")
+    
+    if st.button("🚀 CALCULAR RESULTADOS COMPLETOS", type="primary", use_container_width=True):
+        st.session_state.mostrar_resultados = True
+        st.session_state.periodo_final = periodo_final
+        st.rerun()
+
+# ==========================================
+# CÁLCULOS COMPLETOS CON FORMATO MEJORADO
 # ==========================================
 if st.session_state.mostrar_resultados and todos_documentos:
     st.markdown("---")
-    st.subheader("📊 Resultados del Análisis")
+    st.subheader("📊 RESULTADOS DEL ANÁLISIS")
     
-    # Estadísticas de carga
-    with st.expander("📦 Resumen de archivos cargados"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**📥 Ventas**")
-            for archivo, info in st.session_state.archivos_ventas.items():
-                st.write(f"• {archivo}: {info['documentos']} documentos")
-        
-        with col2:
-            st.markdown("**📤 Compras**")
-            for archivo, info in st.session_state.archivos_compras.items():
-                st.write(f"• {archivo}: {info['documentos']} documentos")
+    # ==========================================
+    # MÉTRICAS PRINCIPALES EN FORMATO VERTICAL
+    # ==========================================
+    st.markdown("### 🎯 MÉTRICAS PRINCIPALES")
     
-    # Agrupar por período seleccionado
+    # Agrupar por período final
     resumen = defaultdict(lambda: {
         'ventas': 0, 
         'compras': 0, 
@@ -468,9 +444,9 @@ if st.session_state.mostrar_resultados and todos_documentos:
     for doc in todos_documentos:
         fecha = doc['fecha']
         
-        if st.session_state.periodo_seleccionado == "Mensual":
+        if st.session_state.periodo_final == "Mensual":
             clave = f"{fecha.year}-{fecha.month:02d}"
-        elif st.session_state.periodo_seleccionado == "Trimestral":
+        elif st.session_state.periodo_final == "Trimestral":
             trimestre = (fecha.month - 1) // 3 + 1
             clave = f"{fecha.year}-T{trimestre}"
         else:
@@ -500,110 +476,199 @@ if st.session_state.mostrar_resultados and todos_documentos:
     
     periodos = sorted(resumen.keys(), key=ordenar_periodo)
     
-    # ==========================================
-    # MÉTRICAS PRINCIPALES
-    # ==========================================
-    st.markdown("### 🎯 Métricas Principales")
-    
+    # Cálculos totales
     total_ventas = sum(resumen[p]['ventas'] for p in periodos)
     total_compras = sum(resumen[p]['compras'] for p in periodos)
     total_resultado = total_ventas - total_compras
     total_documentos = len(todos_documentos)
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Mostrar métricas en formato vertical (una debajo de otra)
+    metricas_container = st.container()
     
-    col1.metric("Ventas Totales", f"${total_ventas:,.0f}")
-    col2.metric("Compras Totales", f"${total_compras:,.0f}")
-    col3.metric("Resultado Neto", f"${total_resultado:,.0f}")
-    col4.metric("Total Documentos", total_documentos)
+    with metricas_container:
+        # Crear columnas para mejor layout
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Ventas
+            st.markdown("### 📥 VENTAS TOTALES")
+            st.markdown(f"<h1 style='text-align: center; color: {'#2ecc71' if total_ventas >= 0 else '#e74c3c'};'>{_formatear_monto(total_ventas)}</h1>", 
+                       unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center;'>Documentos: {sum(resumen[p]['documentos_ventas'] for p in periodos)}</p>", 
+                       unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Compras
+            st.markdown("### 📤 COMPRAS TOTALES")
+            st.markdown(f"<h1 style='text-align: center; color: {'#2ecc71' if total_compras >= 0 else '#e74c3c'};'>{_formatear_monto(total_compras)}</h1>", 
+                       unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center;'>Documentos: {sum(resumen[p]['documentos_compras'] for p in periodos)}</p>", 
+                       unsafe_allow_html=True)
+        
+        with col2:
+            # Resultado Neto
+            st.markdown("### 💰 RESULTADO NETO")
+            color_resultado = "#2ecc71" if total_resultado >= 0 else "#e74c3c"
+            st.markdown(f"<h1 style='text-align: center; color: {color_resultado};'>{_formatear_monto(total_resultado)}</h1>", 
+                       unsafe_allow_html=True)
+            
+            # Calcular margen
+            if total_ventas != 0:
+                margen = (total_resultado / abs(total_ventas)) * 100
+                st.markdown(f"<p style='text-align: center; font-size: 1.5rem; color: {color_resultado};'>Margen: {margen:+.1f}%</p>", 
+                           unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Total Documentos
+            st.markdown("### 📄 TOTAL DOCUMENTOS")
+            st.markdown(f"<h1 style='text-align: center; color: #3498db;'>{total_documentos}</h1>", 
+                       unsafe_allow_html=True)
+            
+            # Desglose
+            docs_ventas = sum(resumen[p]['documentos_ventas'] for p in periodos)
+            docs_compras = sum(resumen[p]['documentos_compras'] for p in periodos)
+            st.markdown(f"<p style='text-align: center;'>Ventas: {docs_ventas} | Compras: {docs_compras}</p>", 
+                       unsafe_allow_html=True)
     
     # ==========================================
     # TABLA DE RESULTADOS POR PERÍODO
     # ==========================================
-    st.markdown("### 📋 Resultados por Período")
+    st.markdown("---")
+    st.markdown("### 📋 RESULTADOS POR PERÍODO")
     
     df_resultados = pd.DataFrame({
         'Período': periodos,
         'Ventas': [resumen[p]['ventas'] for p in periodos],
         'Compras': [resumen[p]['compras'] for p in periodos],
         'Resultado': [resumen[p]['resultado'] for p in periodos],
-        'Docs Ventas': [resumen[p]['documentos_ventas'] for p in periodos],
-        'Docs Compras': [resumen[p]['documentos_compras'] for p in periodos],
+        'Docs V': [resumen[p]['documentos_ventas'] for p in periodos],
+        'Docs C': [resumen[p]['documentos_compras'] for p in periodos],
         'Margen %': [
-            (resumen[p]['resultado'] / resumen[p]['ventas'] * 100) if resumen[p]['ventas'] > 0 else 0 
+            (resumen[p]['resultado'] / resumen[p]['ventas'] * 100) if resumen[p]['ventas'] != 0 else 0 
             for p in periodos
         ]
     })
     
+    # Función para formatear con color
+    def colorizar_resultado(val):
+        if isinstance(val, (int, float)) and val < 0:
+            return 'color: #e74c3c; font-weight: bold;'
+        elif isinstance(val, (int, float)) and val > 0:
+            return 'color: #2ecc71; font-weight: bold;'
+        return ''
+    
     # Formatear tabla
     styled_df = df_resultados.style.format({
-        'Ventas': '${:,.0f}',
-        'Compras': '${:,.0f}',
-        'Resultado': '${:,.0f}',
-        'Margen %': '{:.1f}%'
-    })
+        'Ventas': lambda x: _formatear_monto(x),
+        'Compras': lambda x: _formatear_monto(x),
+        'Resultado': lambda x: _formatear_monto(x),
+        'Margen %': '{:+.1f}%'
+    }).applymap(colorizar_resultado, subset=['Resultado', 'Margen %'])
     
-    st.dataframe(styled_df)
-    
-    # ==========================================
-    # ANÁLISIS ADICIONAL
-    # ==========================================
-    with st.expander("📈 Análisis Adicional"):
-        # Estadísticas por tipo de documento
-        ventas_61 = len([d for d in todos_documentos if d['tipo'] == 'venta' and d['tipo_doc'] == 61])
-        compras_61 = len([d for d in todos_documentos if d['tipo'] == 'compra' and d['tipo_doc'] == 61])
-        
-        st.write("**Documentos tipo 61 (Notas de crédito):**")
-        st.write(f"- Ventas: {ventas_61} documentos")
-        st.write(f"- Compras: {compras_61} documentos")
-        
-        # Distribución por origen de archivo
-        st.write("**Distribución por archivo de origen:**")
-        origenes = {}
-        for doc in todos_documentos:
-            origen = doc.get('archivo_origen', 'Desconocido')
-            origenes[origen] = origenes.get(origen, 0) + 1
-        
-        for origen, cantidad in sorted(origenes.items()):
-            st.write(f"- {origen}: {cantidad} documentos")
+    st.dataframe(styled_df, height=400)
     
     # ==========================================
-    # BOTONES DE ACCIÓN FINAL
+    # RESUMEN DE ARCHIVOS CARGADOS
+    # ==========================================
+    with st.expander("📦 RESUMEN DE ARCHIVOS CARGADOS"):
+        if st.session_state.archivos_ventas:
+            st.markdown("#### 📥 Archivos de Ventas")
+            for archivo, info in st.session_state.archivos_ventas.items():
+                periodo = st.session_state.periodos_confirmados.get(f"venta_{info['numero']}_{archivo}", "No confirmado")
+                st.write(f"• **{archivo}** - {info['documentos']} documentos - Período: {periodo}")
+        
+        if st.session_state.archivos_compras:
+            st.markdown("#### 📤 Archivos de Compras")
+            for archivo, info in st.session_state.archivos_compras.items():
+                periodo = st.session_state.periodos_confirmados.get(f"compra_{info['numero']}_{archivo}", "No confirmado")
+                st.write(f"• **{archivo}** - {info['documentos']} documentos - Período: {periodo}")
+    
+    # ==========================================
+    # ESTADÍSTICAS ADICIONALES
+    # ==========================================
+    with st.expander("📈 ESTADÍSTICAS ADICIONALES"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Documentos tipo 61
+            ventas_61 = len([d for d in todos_documentos if d['tipo'] == 'venta' and d['tipo_doc'] == 61])
+            compras_61 = len([d for d in todos_documentos if d['tipo'] == 'compra' and d['tipo_doc'] == 61])
+            
+            st.markdown("**📝 Documentos tipo 61 (Notas de crédito):**")
+            st.write(f"- Ventas: {ventas_61} documentos")
+            st.write(f"- Compras: {compras_61} documentos")
+            
+            if ventas_61 > 0 or compras_61 > 0:
+                total_61 = ventas_61 + compras_61
+                porcentaje_61 = (total_61 / total_documentos) * 100
+                st.write(f"- **Total:** {total_61} documentos ({porcentaje_61:.1f}% del total)")
+        
+        with col2:
+            # Promedios
+            if len(st.session_state.documentos_ventas) > 0:
+                promedio_venta = total_ventas / len(st.session_state.documentos_ventas)
+                st.markdown("**📊 Promedio por documento:**")
+                st.write(f"- Venta promedio: {_formatear_monto(promedio_venta)}")
+            
+            if len(st.session_state.documentos_compras) > 0:
+                promedio_compra = total_compras / len(st.session_state.documentos_compras)
+                st.write(f"- Compra promedio: {_formatear_monto(promedio_compra)}")
+    
+    # ==========================================
+    # BOTONES FINALES
     # ==========================================
     st.markdown("---")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔄 Realizar nuevo análisis", type="secondary", use_container_width=True):
-            # Resetear estado
-            for key in ['documentos_ventas', 'documentos_compras', 'archivos_ventas', 
-                       'archivos_compras', 'mostrar_resultados']:
+        if st.button("🔄 NUEVO ANÁLISIS", type="secondary", use_container_width=True):
+            # Resetear todo
+            keys_to_reset = ['documentos_ventas', 'documentos_compras', 'archivos_ventas', 
+                           'archivos_compras', 'periodos_confirmados', 'mostrar_resultados']
+            for key in keys_to_reset:
                 if key in st.session_state:
-                    st.session_state[key] = [] if 'archivos' not in key else {}
+                    if 'archivos' in key or 'periodos' in key:
+                        st.session_state[key] = {}
+                    else:
+                        st.session_state[key] = []
             st.rerun()
     
     with col2:
-        if st.button("📊 Exportar resumen", type="primary", use_container_width=True):
-            # Preparar datos para exportación
-            datos_exportacion = {
-                'configuracion': {
-                    'periodo': st.session_state.periodo_seleccionado,
-                    'fecha_min': fecha_min.strftime('%Y-%m-%d'),
-                    'fecha_max': fecha_max.strftime('%Y-%m-%d')
-                },
-                'metricas_totales': {
-                    'ventas_totales': total_ventas,
-                    'compras_totales': total_compras,
-                    'resultado_total': total_resultado,
-                    'total_documentos': total_documentos
-                },
-                'resultados_por_periodo': df_resultados.to_dict('records')
-            }
+        if st.button("📋 COPIAR RESUMEN", type="primary", use_container_width=True):
+            # Crear resumen textual
+            resumen_texto = f"""
+            RESUMEN DE ANÁLISIS
+            ===================
+            Período: {st.session_state.periodo_final}
+            Fecha de análisis: {datetime.now().strftime('%d/%m/%Y %H:%M')}
             
-            st.success("✅ Datos listos para exportación")
-            st.json(datos_exportacion)
+            MÉTRICAS PRINCIPALES:
+            --------------------
+            Ventas Totales: {_formatear_monto(total_ventas)}
+            Compras Totales: {_formatear_monto(total_compras)}
+            Resultado Neto: {_formatear_monto(total_resultado)}
+            Total Documentos: {total_documentos}
+            
+            ARCHIVOS PROCESADOS:
+            -------------------
+            Ventas: {len(st.session_state.archivos_ventas)} archivo(s)
+            Compras: {len(st.session_state.archivos_compras)} archivo(s)
+            
+            PERÍODOS ANALIZADOS:
+            -------------------
+            {', '.join(periodos)}
+            """
+            
+            st.code(resumen_texto, language='text')
+            st.success("✅ Resumen listo para copiar")
+
+# Mensaje inicial si no hay archivos
+if not todos_documentos and not st.session_state.mostrar_resultados:
+    st.info("👈 Comienza cargando archivos de ventas y compras")
 
 # Pie de página
 st.markdown("---")
-st.caption("Simulador de Resultados | Múltiples archivos + Confirmación de período")
+st.caption(f"© {datetime.now().year} - Simulador de Resultados | Período por archivo + Formato mejorado")
