@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CON TABS SEPARADAS
+# app.py - VERSIÓN CORREGIDA (sin redundancia y limpia correctamente)
 import streamlit as st
 from datetime import datetime
 import pandas as pd
@@ -24,11 +24,11 @@ if 'periodos_asignados' not in st.session_state:
     st.session_state.periodos_asignados = {}
 
 # ==========================================
-# COMPONENTES DE INTERFAZ
+# COMPONENTES DE INTERFAZ MEJORADOS
 # ==========================================
 
 def crear_uploader_multiple(tipo):
-    """Crea uploader para múltiples archivos."""
+    """Crea uploader para múltiples archivos SIN mostrar lista."""
     st.markdown(f"### 📋 Archivos de {tipo}")
     
     archivos = st.file_uploader(
@@ -41,51 +41,52 @@ def crear_uploader_multiple(tipo):
     )
     
     if archivos:
-        st.success(f"📦 **{len(archivos)} archivo(s) de {tipo.lower()} seleccionado(s)**")
+        st.success(f"✅ **{len(archivos)} archivo(s) de {tipo.lower()} seleccionado(s)**")
     
     return archivos
 
-def mostrar_archivo_compacto(info_archivo, idx, tipo):
-    """Muestra información de archivo en formato compacto."""
+def mostrar_info_archivo_simple(info_archivo, tipo):
+    """Muestra información MÍNIMA del archivo (solo para confirmación)."""
     with st.container():
-        col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+        # Solo mostramos lo esencial para confirmar el período
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            nombre_corto = info_archivo['nombre_archivo'][:25]
-            if len(info_archivo['nombre_archivo']) > 25:
-                nombre_corto += "..."
-            st.markdown(f"**{idx+1}. {nombre_corto}**")
-            st.markdown(f"📄 **{info_archivo['documentos_count']} doc**")
+            # Nombre muy corto
+            nombre = info_archivo['nombre_archivo']
+            if len(nombre) > 20:
+                nombre = nombre[:17] + "..."
+            st.markdown(f"**Archivo:** `{nombre}`")
+            
+            # Solo información clave
+            st.caption(f"📄 {info_archivo['documentos_count']} documentos | " 
+                      f"📅 {info_archivo['fecha_minima'].strftime('%d/%m')}-"
+                      f"{info_archivo['fecha_maxima'].strftime('%d/%m/%Y')}")
         
         with col2:
-            fecha_min = info_archivo['fecha_minima'].strftime('%d/%m')
-            fecha_max = info_archivo['fecha_maxima'].strftime('%d/%m/%Y')
-            st.markdown(f"📅 **{fecha_min} - {fecha_max}**")
+            st.markdown(f"**{formatear_monto(info_archivo['total_monto'])}**")
         
-        with col3:
-            if info_archivo['año_predominante']:
-                porcentaje = (info_archivo['cantidad_predominante'] / info_archivo['documentos_count']) * 100
-                if porcentaje >= 50:
-                    st.markdown(f"🔍 **{info_archivo['año_predominante']}-{info_archivo['mes_predominante']:02d}**")
-                else:
-                    st.markdown(f"⚠️ **Varios períodos**")
+        # Detección automática
+        if info_archivo['año_predominante']:
+            porcentaje = (info_archivo['cantidad_predominante'] / info_archivo['documentos_count']) * 100
+            if porcentaje >= 50:
+                st.info(f"📅 **Detección automática:** {info_archivo['año_predominante']}-{info_archivo['mes_predominante']:02d} "
+                       f"({porcentaje:.0f}% de los documentos)")
             else:
-                st.markdown("❓ **Sin detección**")
-        
-        with col4:
-            st.markdown(f"💰 **{formatear_monto(info_archivo['total_monto'])}**")
+                st.warning("⚠️ **Múltiples períodos detectados** - Verifica cuidadosamente")
+        else:
+            st.error("❌ **No se pudo detectar período** - Asigna manualmente")
         
         return info_archivo['año_predominante'], info_archivo['mes_predominante']
 
-def solicitar_periodo(año_pred, mes_pred, idx, nombre_archivo, tipo):
-    """Solicita confirmación del año-mes con botón de confirmación."""
+def solicitar_periodo(año_pred, mes_pred, nombre_archivo, tipo, idx):
+    """Solicita confirmación del año-mes CON botón de confirmación."""
     with st.container():
-        col_a, col_b, col_c, col_d, col_e = st.columns([1, 2, 2, 2, 1])
+        st.markdown("**Asignar Período:**")
+        
+        col_a, col_b, col_c = st.columns([2, 2, 1])
         
         with col_a:
-            st.markdown("**Período:**")
-        
-        with col_b:
             años_disponibles = list(range(2020, datetime.now().year + 2))
             año_default = año_pred if año_pred and año_pred in años_disponibles else datetime.now().year
             año_index = años_disponibles.index(año_default) if año_default in años_disponibles else len(años_disponibles)-1
@@ -98,7 +99,7 @@ def solicitar_periodo(año_pred, mes_pred, idx, nombre_archivo, tipo):
                 label_visibility="collapsed"
             )
         
-        with col_c:
+        with col_b:
             meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
                     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
             mes_default = mes_pred - 1 if mes_pred else 0
@@ -111,123 +112,136 @@ def solicitar_periodo(año_pred, mes_pred, idx, nombre_archivo, tipo):
                 label_visibility="collapsed"
             )
         
-        with col_d:
+        with col_c:
             mes_numero = meses.index(mes_seleccionado) + 1
-            periodo_texto = f"**{año_seleccionado}-{mes_numero:02d}**"
-            st.markdown(periodo_texto)
-        
-        with col_e:
-            estado_key = f"confirmado_{tipo}_{idx}_{nombre_archivo}"
+            
+            # Estado para saber si ya se confirmó este archivo
+            estado_key = f"confirmado_{nombre_archivo}"
             if estado_key not in st.session_state:
                 st.session_state[estado_key] = False
             
             if st.session_state[estado_key]:
-                st.success("✅")
+                st.success(f"✅ {año_seleccionado}-{mes_numero:02d}")
                 return año_seleccionado, mes_numero, True
             else:
-                if st.button("✓", key=f"btn_{tipo}_{idx}_{nombre_archivo}", 
-                           help="Confirmar período", type="secondary"):
+                if st.button("Confirmar", 
+                           key=f"btn_{tipo}_{idx}_{nombre_archivo}", 
+                           type="primary",
+                           use_container_width=True):
                     st.session_state[estado_key] = True
                     st.rerun()
                 return año_seleccionado, mes_numero, False
+        
+        st.markdown("---")
 
 # ==========================================
-# PESTAÑA 1: CARGA DE ARCHIVOS
+# PESTAÑA 1: CARGA DE ARCHIVOS (SIMPLIFICADA)
 # ==========================================
 
 def pestana_carga():
-    """Pestaña para cargar archivos."""
+    """Pestaña para cargar archivos SIN redundancia."""
     st.header("📥 Carga de Archivos")
     
-    # Contadores para mostrar advertencias
-    archivos_pendientes_ventas = 0
-    archivos_pendientes_compras = 0
-    
-    # Ventas
-    archivos_ventas = crear_uploader_multiple("Ventas")
-    
-    if archivos_ventas:
-        for idx, archivo in enumerate(archivos_ventas):
-            if archivo.name in st.session_state.archivos_procesados:
-                st.info(f"⏭️ Archivo '{archivo.name[:20]}...' ya procesado")
-                continue
-            
-            try:
-                info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "venta")
-                año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Venta")
-                año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
-                    año_pred, mes_pred, idx, archivo.name, "venta"
-                )
-                
-                if confirmado:
-                    st.session_state.archivos_procesados[archivo.name] = info_archivo
-                    st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
-                    st.success(f"✅ Período {año_confirmado}-{mes_confirmado:02d} confirmado")
-                else:
-                    archivos_pendientes_ventas += 1
-                
-            except Exception as e:
-                st.error(f"❌ **Venta {idx+1} - {archivo.name}:** {str(e)[:50]}")
-    
-    # Compras
-    archivos_compras = crear_uploader_multiple("Compras")
-    
-    if archivos_compras:
-        for idx, archivo in enumerate(archivos_compras):
-            if archivo.name in st.session_state.archivos_procesados:
-                st.info(f"⏭️ Archivo '{archivo.name[:20]}...' ya procesado")
-                continue
-            
-            try:
-                info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "compra")
-                año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Compra")
-                año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
-                    año_pred, mes_pred, idx, archivo.name, "compra"
-                )
-                
-                if confirmado:
-                    st.session_state.archivos_procesados[archivo.name] = info_archivo
-                    st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
-                    st.success(f"✅ Período {año_confirmado}-{mes_confirmado:02d} confirmado")
-                else:
-                    archivos_pendientes_compras += 1
-                
-            except Exception as e:
-                st.error(f"❌ **Compra {idx+1} - {archivo.name}:** {str(e)[:50]}")
-    
-    # Mostrar advertencias si hay archivos pendientes
-    if archivos_pendientes_ventas > 0 or archivos_pendientes_compras > 0:
-        st.warning(f"""
-        ⚠️ **Archivos pendientes de confirmación:**
-        - Ventas: {archivos_pendientes_ventas} archivo(s)
-        - Compras: {archivos_pendientes_compras} archivo(s)
-        
-        **Para continuar:** Haz clic en ✓ en cada archivo para confirmar el período.
-        """)
-    
-    # Mostrar resumen de lo que ya está cargado
+    # Mostrar solo un resumen rápido si ya hay archivos
     if st.session_state.archivos_procesados:
-        st.markdown("---")
-        st.subheader("📊 Resumen de Archivos Cargados")
+        st.success(f"✅ **{len(st.session_state.archivos_procesados)} archivo(s) ya cargado(s)**")
         
-        archivos_ventas = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                          if v['tipo_archivo'] == 'venta'}
-        archivos_compras = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                           if v['tipo_archivo'] == 'compra'}
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Archivos Totales", len(st.session_state.archivos_procesados))
+            ventas = sum(1 for v in st.session_state.archivos_procesados.values() 
+                        if v['tipo_archivo'] == 'venta')
+            st.metric("Ventas", ventas)
         with col2:
-            st.metric("Archivos Ventas", len(archivos_ventas))
+            compras = sum(1 for v in st.session_state.archivos_procesados.values() 
+                         if v['tipo_archivo'] == 'compra')
+            st.metric("Compras", compras)
         with col3:
-            st.metric("Archivos Compras", len(archivos_compras))
-        with col4:
-            total_docs = sum(info['documentos_count'] for info in st.session_state.archivos_procesados.values())
+            total_docs = sum(v['documentos_count'] for v in st.session_state.archivos_procesados.values())
             st.metric("Documentos", total_docs)
         
-        st.success("✅ Archivos listos. Ve a la pestaña 'Análisis' para ver resultados.")
+        st.info("💡 Para agregar más archivos, súbelos a continuación. Para reiniciar, ve a la pestaña 'Configuración'.")
+        st.markdown("---")
+    
+    # Inicializar contadores
+    archivos_nuevos_procesados = 0
+    archivos_pendientes = 0
+    
+    # ===== SECCIÓN VENTAS =====
+    with st.expander("📤 **Cargar Archivos de VENTAS**", expanded=True):
+        archivos_ventas = crear_uploader_multiple("Ventas")
+        
+        if archivos_ventas:
+            for idx, archivo in enumerate(archivos_ventas):
+                # Verificar si ya está procesado
+                if archivo.name in st.session_state.archivos_procesados:
+                    continue
+                
+                try:
+                    # Procesar archivo
+                    with st.spinner(f"Procesando {archivo.name[:20]}..."):
+                        info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "venta")
+                    
+                    # Mostrar info mínima y solicitar período
+                    año_pred, mes_pred = mostrar_info_archivo_simple(info_archivo, "Venta")
+                    año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
+                        año_pred, mes_pred, archivo.name, "venta", idx
+                    )
+                    
+                    if confirmado:
+                        st.session_state.archivos_procesados[archivo.name] = info_archivo
+                        st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                        archivos_nuevos_procesados += 1
+                        st.success(f"✅ **{archivo.name[:20]}...** asignado a **{año_confirmado}-{mes_confirmado:02d}**")
+                    else:
+                        archivos_pendientes += 1
+                    
+                except Exception as e:
+                    st.error(f"❌ **Error en {archivo.name[:20]}...:** {str(e)[:100]}")
+    
+    # ===== SECCIÓN COMPRAS =====
+    with st.expander("📥 **Cargar Archivos de COMPRAS**", expanded=True):
+        archivos_compras = crear_uploader_multiple("Compras")
+        
+        if archivos_compras:
+            for idx, archivo in enumerate(archivos_compras):
+                if archivo.name in st.session_state.archivos_procesados:
+                    continue
+                
+                try:
+                    with st.spinner(f"Procesando {archivo.name[:20]}..."):
+                        info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "compra")
+                    
+                    año_pred, mes_pred = mostrar_info_archivo_simple(info_archivo, "Compra")
+                    año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
+                        año_pred, mes_pred, archivo.name, "compra", idx
+                    )
+                    
+                    if confirmado:
+                        st.session_state.archivos_procesados[archivo.name] = info_archivo
+                        st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                        archivos_nuevos_procesados += 1
+                        st.success(f"✅ **{archivo.name[:20]}...** asignado a **{año_confirmado}-{mes_confirmado:02d}**")
+                    else:
+                        archivos_pendientes += 1
+                    
+                except Exception as e:
+                    st.error(f"❌ **Error en {archivo.name[:20]}...:** {str(e)[:100]}")
+    
+    # ===== RESUMEN FINAL =====
+    if archivos_nuevos_procesados > 0:
+        st.success(f"""
+        🎉 **{archivos_nuevos_procesados} nuevo(s) archivo(s) procesado(s) correctamente.**
+        
+        **Total de archivos cargados:** {len(st.session_state.archivos_procesados)}
+        **Ve a la pestaña '📈 Análisis' para ver resultados.**
+        """)
+    
+    if archivos_pendientes > 0:
+        st.warning(f"""
+        ⚠️ **{archivos_pendientes} archivo(s) pendiente(s) de confirmación.**
+        
+        **Para confirmar:** Asigna el período y haz clic en 'Confirmar' para cada archivo.
+        """)
 
 # ==========================================
 # PESTAÑA 2: ANÁLISIS Y RESULTADOS
@@ -241,21 +255,43 @@ def pestana_analisis():
         st.info("""
         ⚠️ **No hay archivos cargados.**
         
-        Por favor:
-        1. Ve a la pestaña **'Carga de Archivos'**
+        **Pasos a seguir:**
+        1. Ve a la pestaña **'📥 Carga de Archivos'**
         2. Sube tus archivos de ventas y compras
-        3. Confirma los períodos para cada archivo
-        4. Regresa a esta pestaña para ver los resultados
+        3. Asigna períodos a cada archivo
+        4. Regresa aquí para ver los resultados
+        
+        💡 Puedes cargar múltiples archivos a la vez.
         """)
         return
     
     # Botón para recalcular
-    if st.button("🔄 Recalcular Análisis", type="primary"):
-        st.rerun()
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Recalcular", type="primary", use_container_width=True):
+            st.rerun()
+    
+    # Resumen rápido
+    total_archivos = len(st.session_state.archivos_procesados)
+    archivos_ventas = sum(1 for v in st.session_state.archivos_procesados.values() 
+                         if v['tipo_archivo'] == 'venta')
+    archivos_compras = total_archivos - archivos_ventas
+    
+    with st.expander(f"📋 **Resumen: {total_archivos} archivo(s) cargado(s)**", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Archivos", total_archivos)
+        with col2:
+            st.metric("Archivos Ventas", archivos_ventas)
+        with col3:
+            st.metric("Archivos Compras", archivos_compras)
+        with col4:
+            total_docs = sum(v['documentos_count'] for v in st.session_state.archivos_procesados.values())
+            st.metric("Documentos", total_docs)
     
     st.markdown("---")
     
-    # Recolectar documentos
+    # Recolectar documentos para cálculo
     todos_documentos = []
     for info in st.session_state.archivos_procesados.values():
         for doc in info['documentos']:
@@ -263,7 +299,7 @@ def pestana_analisis():
             doc['periodo_asignado'] = periodo
             todos_documentos.append(doc)
     
-    # Calcular usando CalculadoraResultados
+    # Calcular resultados
     resumen_periodos = CalculadoraResultados.agrupar_por_periodo(
         todos_documentos, 
         st.session_state.periodos_asignados
@@ -272,8 +308,8 @@ def pestana_analisis():
     datos_tabla = CalculadoraResultados.generar_dataframe_resultados(resumen_periodos)
     estadisticas = CalculadoraResultados.calcular_estadisticas(todos_documentos)
     
-    # ===== SECCIÓN 1: RESUMEN GENERAL =====
-    st.subheader("📊 Resumen General")
+    # ===== SECCIÓN 1: MÉTRICAS PRINCIPALES =====
+    st.subheader("📊 Métricas Principales")
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -289,183 +325,138 @@ def pestana_analisis():
     
     # ===== SECCIÓN 2: TABLA POR PERÍODO =====
     st.markdown("---")
-    st.subheader("📅 Análisis por Período")
+    st.subheader("📅 Resultados por Período")
     
     if datos_tabla:
         df_resultados = pd.DataFrame(datos_tabla)
         
-        def aplicar_estilo(val):
-            if isinstance(val, (int, float)) and val < 0:
-                return 'color: #e74c3c; font-weight: bold;'
-            elif isinstance(val, (int, float)) and val > 0:
-                return 'color: #2ecc71; font-weight: bold;'
-            return ''
+        # Formatear tabla
+        def formatear_fila(row):
+            styles = []
+            for val in row:
+                if isinstance(val, (int, float)):
+                    if val < 0:
+                        styles.append('color: #e74c3c; font-weight: bold;')
+                    elif val > 0 and row.name in ['Resultado', 'Margen %']:
+                        styles.append('color: #2ecc71; font-weight: bold;')
+                    else:
+                        styles.append('')
+                else:
+                    styles.append('')
+            return styles
         
+        # Aplicar formato condicional
         styled_df = df_resultados.style.format({
             'Ventas': lambda x: formatear_monto(x),
             'Compras': lambda x: formatear_monto(x),
             'Resultado': lambda x: formatear_monto(x),
             'Margen %': '{:+.1f}%'
-        }).applymap(aplicar_estilo, subset=['Resultado', 'Margen %'])
+        }).apply(formatear_fila, axis=1)
         
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(styled_df, use_container_width=True, height=400)
+        
+        # Exportar opción
+        csv = df_resultados.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar como CSV",
+            data=csv,
+            file_name="resultados_por_periodo.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
     else:
         st.info("No hay datos para mostrar por período.")
     
-    # ===== SECCIÓN 3: ESTADÍSTICAS DETALLADAS =====
+    # ===== SECCIÓN 3: ESTADÍSTICAS ADICIONALES =====
     st.markdown("---")
-    st.subheader("📊 Estadísticas Detalladas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**📈 Promedios:**")
-        st.metric("Promedio Venta", formatear_monto(estadisticas['promedio_venta']))
-        st.metric("Promedio Compra", formatear_monto(estadisticas['promedio_compra']))
+    with st.expander("📊 **Estadísticas Detalladas**"):
+        col1, col2 = st.columns(2)
         
-        st.markdown("**📝 Notas de Crédito:**")
-        st.metric("NC Ventas", estadisticas['notas_credito_ventas'])
-        st.metric("NC Compras", estadisticas['notas_credito_compras'])
-    
-    with col2:
-        st.markdown("**📋 Distribución:**")
+        with col1:
+            st.markdown("##### 📈 Promedios")
+            st.metric("Promedio por Venta", formatear_monto(estadisticas['promedio_venta']))
+            st.metric("Promedio por Compra", formatear_monto(estadisticas['promedio_compra']))
+            
+            st.markdown("##### 📝 Notas de Crédito")
+            st.metric("Ventas", estadisticas['notas_credito_ventas'])
+            st.metric("Compras", estadisticas['notas_credito_compras'])
         
-        # Crear DataFrame para gráfico de distribución
-        dist_data = {
-            'Tipo': ['Ventas', 'Compras'],
-            'Cantidad': [estadisticas['total_ventas_count'], estadisticas['total_compras_count']],
-            'Monto': [totales['ventas_totales'], totales['compras_totales']]
-        }
-        df_dist = pd.DataFrame(dist_data)
-        
-        st.dataframe(df_dist, use_container_width=True, hide_index=True)
-    
-    # ===== SECCIÓN 4: DETALLE DE ARCHIVOS =====
-    st.markdown("---")
-    with st.expander("📁 Ver Detalle de Archivos Cargados"):
-        archivos_ventas = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                          if v['tipo_archivo'] == 'venta'}
-        archivos_compras = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                           if v['tipo_archivo'] == 'compra'}
-        
-        tab1, tab2 = st.tabs([f"Ventas ({len(archivos_ventas)})", f"Compras ({len(archivos_compras)})"])
-        
-        with tab1:
-            if archivos_ventas:
-                for archivo, info in archivos_ventas.items():
-                    periodo = st.session_state.periodos_asignados.get(archivo, "No asignado")
-                    with st.container():
-                        st.markdown(f"**{archivo}**")
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.caption(f"Período: {periodo}")
-                        with col_b:
-                            st.caption(f"Documentos: {info['documentos_count']}")
-                        with col_c:
-                            st.caption(f"Monto: {formatear_monto(info['total_monto'])}")
-                        st.markdown("---")
-            else:
-                st.info("No hay archivos de ventas")
-        
-        with tab2:
-            if archivos_compras:
-                for archivo, info in archivos_compras.items():
-                    periodo = st.session_state.periodos_asignados.get(archivo, "No asignado")
-                    with st.container():
-                        st.markdown(f"**{archivo}**")
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.caption(f"Período: {periodo}")
-                        with col_b:
-                            st.caption(f"Documentos: {info['documentos_count']}")
-                        with col_c:
-                            st.caption(f"Monto: {formatear_monto(info['total_monto'])}")
-                        st.markdown("---")
-            else:
-                st.info("No hay archivos de compras")
+        with col2:
+            st.markdown("##### 📋 Distribución")
+            dist_data = pd.DataFrame({
+                'Tipo': ['Ventas', 'Compras'],
+                'Documentos': [estadisticas['total_ventas_count'], estadisticas['total_compras_count']],
+                'Monto Total': [totales['ventas_totales'], totales['compras_totales']]
+            })
+            st.dataframe(dist_data, use_container_width=True, hide_index=True)
 
 # ==========================================
-# PESTAÑA 3: CONFIGURACIÓN
+# PESTAÑA 3: CONFIGURACIÓN (CORREGIDA PARA LIMPIAR)
 # ==========================================
 
 def pestana_configuracion():
-    """Pestaña para configuración y limpieza."""
+    """Pestaña para configuración - CORREGIDA para limpiar TODO."""
     st.header("⚙️ Configuración")
     
-    st.markdown("### 📊 Estado Actual")
+    st.markdown("### 📊 Estado Actual del Sistema")
     
-    col1, col2 = st.columns(2)
+    # Mostrar estado actual
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric("Archivos Cargados", len(st.session_state.archivos_procesados))
-        st.metric("Períodos Asignados", len(st.session_state.periodos_asignados))
-    
     with col2:
+        st.metric("Períodos Asignados", len(st.session_state.periodos_asignados))
+    with col3:
         if st.session_state.archivos_procesados:
             total_docs = sum(info['documentos_count'] for info in st.session_state.archivos_procesados.values())
-            st.metric("Documentos Totales", total_docs)
-            
-            total_monto = sum(info['total_monto'] for info in st.session_state.archivos_procesados.values())
-            st.metric("Monto Total", formatear_monto(total_monto))
+            st.metric("Documentos", total_docs)
         else:
-            st.info("No hay datos cargados")
+            st.metric("Documentos", 0)
+    
+    # Lista de archivos cargados
+    if st.session_state.archivos_procesados:
+        st.markdown("---")
+        st.markdown("### 📁 Archivos Actualmente Cargados")
+        
+        for archivo, info in st.session_state.archivos_procesados.items():
+            periodo = st.session_state.periodos_asignados.get(archivo, "No asignado")
+            with st.container():
+                col_a, col_b, col_c = st.columns([3, 2, 1])
+                with col_a:
+                    st.text(archivo[:40] + ("..." if len(archivo) > 40 else ""))
+                with col_b:
+                    st.code(periodo)
+                with col_c:
+                    st.text(formatear_monto(info['total_monto']))
+                st.markdown("---")
     
     st.markdown("---")
-    st.markdown("### 🗑️ Gestión de Datos")
+    st.markdown("### 🚨 Acciones del Sistema")
     
-    col_a, col_b = st.columns(2)
-    
-    with col_a:
-        if st.button("🔍 Ver Datos en Bruto", use_container_width=True):
-            if st.session_state.archivos_procesados:
-                st.json(st.session_state.archivos_procesados, expanded=False)
-            else:
-                st.info("No hay datos para mostrar")
-    
-    with col_b:
-        if st.button("📥 Exportar Resumen", use_container_width=True):
-            if st.session_state.archivos_procesados:
-                # Crear DataFrame para exportar
-                datos_exportar = []
-                for archivo, info in st.session_state.archivos_procesados.items():
-                    datos_exportar.append({
-                        'Archivo': archivo,
-                        'Tipo': info['tipo_archivo'],
-                        'Período': st.session_state.periodos_asignados.get(archivo, 'No asignado'),
-                        'Documentos': info['documentos_count'],
-                        'Monto Total': info['total_monto'],
-                        'Fecha Mínima': info['fecha_minima'].strftime('%Y-%m-%d'),
-                        'Fecha Máxima': info['fecha_maxima'].strftime('%Y-%m-%d')
-                    })
-                
-                df_export = pd.DataFrame(datos_exportar)
-                csv = df_export.to_csv(index=False).encode('utf-8')
-                
-                st.download_button(
-                    label="📥 Descargar CSV",
-                    data=csv,
-                    file_name="resumen_archivos.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            else:
-                st.info("No hay datos para exportar")
-    
-    st.markdown("---")
-    st.markdown("### 🚨 Acciones Peligrosas")
-    
-    if st.button("🔄 Nuevo Análisis (Limpiar Todo)", type="secondary", use_container_width=True):
-        # Limpiar estados de confirmación
-        keys_a_eliminar = [k for k in st.session_state.keys() if k.startswith('confirmado_')]
-        for key in keys_a_eliminar:
-            del st.session_state[key]
+    # Acción PELIGROSA: Limpiar TODO
+    if st.button("🔄 **INICIAR NUEVO ANÁLISIS (Borra Todo)**", 
+                 type="secondary", 
+                 use_container_width=True,
+                 help="⚠️ Esta acción eliminará TODOS los archivos y datos cargados"):
         
-        # Limpiar los otros estados
-        for key in ['archivos_procesados', 'periodos_asignados']:
-            if key in st.session_state:
-                st.session_state[key] = {}
+        # Crear lista de TODAS las keys a eliminar
+        todas_keys = list(st.session_state.keys())
         
-        st.success("✅ Todos los datos han sido limpiados")
+        # Filtrar solo las que queremos eliminar
+        keys_a_preservar = []  # Ninguna, queremos limpiar TODO
+        
+        # Eliminar cada key excepto las preservadas
+        for key in todas_keys:
+            if key not in keys_a_preservar:
+                del st.session_state[key]
+        
+        # Reinicializar los estados vacíos
+        st.session_state.archivos_procesados = {}
+        st.session_state.periodos_asignados = {}
+        
+        st.success("✅ **¡Todo ha sido limpiado correctamente!**")
+        st.info("💡 El sistema ha sido reiniciado. Puedes comenzar un nuevo análisis.")
         st.rerun()
 
 # ==========================================
