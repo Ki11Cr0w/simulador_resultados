@@ -1,6 +1,7 @@
-# app.py - VERSIÓN COMPLETA Y FINAL
+# app.py - CON MEJOR MANEJO DE ERRORES
 import streamlit as st
 from datetime import datetime
+import traceback
 
 # ==========================================
 # CONFIGURACIÓN
@@ -21,23 +22,34 @@ if 'mostrar_resultados' not in st.session_state:
     st.session_state.mostrar_resultados = False
 
 # ==========================================
-# IMPORTAR MÓDULOS
+# IMPORTAR MÓDULOS CON MANEJO DE ERRORES DETALLADO
 # ==========================================
 
 try:
-    # Intentar importar los módulos UI
+    # Intentar importar módulos core primero
+    from core import ProcesadorArchivos, CalculadoraResultados, formatear_monto
+    CORE_DISPONIBLE = True
+except ImportError as e:
+    st.error(f"❌ Error importando módulos CORE: {str(e)}")
+    CORE_DISPONIBLE = False
+    with st.expander("🔍 Ver detalles del error CORE"):
+        st.code(traceback.format_exc())
+
+try:
+    # Intentar importar módulos UI
     from ui.vistas import vista_carga_multiple_archivos, vista_resumen_compacto, vista_resultados
     UI_DISPONIBLE = True
-    
 except ImportError as e:
-    st.error(f"❌ Error importando módulos: {str(e)}")
+    st.error(f"❌ Error importando módulos UI: {str(e)}")
     UI_DISPONIBLE = False
+    with st.expander("🔍 Ver detalles del error UI"):
+        st.code(traceback.format_exc())
 
 # ==========================================
 # FLUJO PRINCIPAL
 # ==========================================
 
-if UI_DISPONIBLE:
+if CORE_DISPONIBLE and UI_DISPONIBLE:
     # 1. Cargar múltiples archivos
     vista_carga_multiple_archivos()
     
@@ -65,9 +77,47 @@ if UI_DISPONIBLE:
         vista_resultados()
 
 else:
-    # Modo de emergencia si hay errores
+    # Mostrar ayuda detallada
     st.error("⚠️ **Error en la configuración de módulos**")
-    st.info("Por favor verifica que los archivos en las carpetas 'core/' y 'ui/' existen y tienen el código correcto.")
+    
+    with st.expander("🛠️ Diagnóstico y solución"):
+        st.markdown("""
+        ### **PROBLEMA:** No se pueden importar los módulos necesarios.
+        
+        ### **SOLUCIÓN:**
+        
+        1. **Verifica que existan estas carpetas y archivos:**
+        
+        ```
+        simulador_resultados/
+        ├── app.py
+        ├── validaciones.py
+        ├── core/
+        │   ├── __init__.py
+        │   ├── utils.py
+        │   ├── procesamiento.py
+        │   └── calculos.py
+        ├── ui/
+        │   ├── __init__.py
+        │   ├── componentes.py
+        │   └── vistas.py
+        ```
+        
+        2. **Contenido mínimo de `ui/__init__.py`:**
+        ```python
+        from .vistas import vista_carga_multiple_archivos
+        from .vistas import vista_resumen_compacto
+        from .vistas import vista_resultados
+        
+        __all__ = [
+            'vista_carga_multiple_archivos',
+            'vista_resumen_compacto',
+            'vista_resultados'
+        ]
+        ```
+        
+        3. **Reinicia la aplicación** después de hacer los cambios.
+        """)
 
 # ==========================================
 # BOTÓN DE REINICIO
@@ -84,33 +134,9 @@ if st.session_state.archivos_procesados:
         st.rerun()
 
 # Mensaje inicial
-if not st.session_state.archivos_procesados and not st.session_state.mostrar_resultados and UI_DISPONIBLE:
-    with st.expander("📋 **INSTRUCCIONES - Carga MÚLTIPLE de archivos**", expanded=True):
-        st.markdown("""
-        ### 🚀 **CÓMO USAR ESTE SIMULADOR:**
-        
-        **1. 📥 CARGA DE ARCHIVOS (ILIMITADOS):**
-        - **Ventas:** Selecciona TODOS tus archivos de ventas (pueden ser varios a la vez)
-        - **Compras:** Selecciona TODOS tus archivos de compras (pueden ser varios a la vez)
-        - ✅ **Puedes seleccionar MÚLTIPLES archivos SIMULTÁNEAMENTE**
-        
-        **2. 📝 CONFIRMACIÓN DE PERÍODO:**
-        - Para cada archivo, el sistema detectará automáticamente el período
-        - Confirma o corrige el **AÑO** y **MES** correspondiente
-        
-        **3. 📊 ANÁLISIS FINAL:**
-        - Revisa el resumen de todos los archivos cargados
-        - Haz click en **"Calcular Análisis"** para ver resultados detallados
-        
-        ---
-        
-        **💡 CONSEJOS PRÁCTICOS:**
-        - Puedes cargar **tantos archivos como necesites** (no hay límite de 3)
-        - Usa **Ctrl/Cmd + click** para seleccionar archivos individuales
-        - O **arrastra y suelta** para seleccionar varios a la vez
-        - Cada archivo debe corresponder a un **mes específico** (ej: 2024-01, 2024-02, etc.)
-        """)
+if not st.session_state.archivos_procesados and not st.session_state.mostrar_resultados and CORE_DISPONIBLE and UI_DISPONIBLE:
+    st.info("👇 **Comienza cargando tus archivos de ventas y compras**")
 
 # Pie de página
 st.markdown("---")
-st.caption(f"Simulador de Resultados | Carga múltiple ilimitada | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+st.caption(f"Simulador de Resultados | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
