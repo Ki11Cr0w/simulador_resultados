@@ -1,15 +1,15 @@
-# app.py - INTERFAZ PRINCIPAL (Streamlit)
+# app.py - VERSIÓN FINAL COMPACTA
 import streamlit as st
 from datetime import datetime
 
-# Importar vistas
-from ui import vista_carga_archivos, vista_resumen, vista_resultados
+# Importar vistas compactas
+from ui import vista_carga_archivos_compacta, vista_resumen_compacto, vista_resultados
 
 # ==========================================
 # CONFIGURACIÓN
 # ==========================================
 
-st.set_page_config(page_title="Simulador de Resultados", layout="centered")
+st.set_page_config(page_title="Simulador de Resultados", layout="wide")
 st.title("📊 Simulador de Resultados")
 
 # ==========================================
@@ -24,43 +24,27 @@ if 'mostrar_resultados' not in st.session_state:
     st.session_state.mostrar_resultados = False
 
 # ==========================================
-# FLUJO PRINCIPAL
+# FLUJO PRINCIPAL COMPACTO
 # ==========================================
 
-# 1. Cargar archivos
-vista_carga_archivos()
+# 1. Cargar archivos (formato compacto)
+vista_carga_archivos_compacta()
 
-# 2. Mostrar resumen si hay archivos
+# 2. Mostrar resumen compacto si hay archivos
 if st.session_state.archivos_procesados:
     st.markdown("---")
     
-    if vista_resumen():
-        # Calcular totales para el botón
-        archivos_ventas = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                          if v['tipo_archivo'] == 'venta'}
-        archivos_compras = {k:v for k,v in st.session_state.archivos_procesados.items() 
-                           if v['tipo_archivo'] == 'compra'}
-        
-        total_ventas = sum(info['total_monto'] for info in archivos_ventas.values())
-        total_compras = sum(info['total_monto'] for info in archivos_compras.values())
-        
-        from core.utils import formatear_monto
-        
-        st.markdown("---")
-        col1, col2 = st.columns(2)
+    if vista_resumen_compacto():
+        # Botón para calcular análisis
+        col1, col2 = st.columns([3, 1])
         
         with col1:
-            st.markdown("**📥 VENTAS TOTALES**")
-            st.markdown(f"<h3 style='color: #2ecc71;'>{formatear_monto(total_ventas)}</h3>", unsafe_allow_html=True)
+            st.markdown("**¿Listo para analizar los datos?**")
         
         with col2:
-            st.markdown("**📤 COMPRAS TOTALES**")
-            st.markdown(f"<h3 style='color: #e74c3c;'>{formatear_monto(total_compras)}</h3>", unsafe_allow_html=True)
-        
-        # Botón para calcular
-        if st.button("🚀 CALCULAR ANÁLISIS DETALLADO", type="primary", use_container_width=True):
-            st.session_state.mostrar_resultados = True
-            st.rerun()
+            if st.button("🚀 Calcular Análisis", type="primary", use_container_width=True):
+                st.session_state.mostrar_resultados = True
+                st.rerun()
 
 # 3. Mostrar resultados si se solicitó
 if st.session_state.mostrar_resultados:
@@ -74,15 +58,18 @@ if st.session_state.mostrar_resultados:
 if st.session_state.archivos_procesados:
     st.markdown("---")
     
-    if st.button("🔄 INICIAR NUEVO ANÁLISIS", type="secondary", use_container_width=True):
-        for key in ['archivos_procesados', 'periodos_asignados', 'mostrar_resultados']:
-            if key in st.session_state:
-                st.session_state[key] = {} if 'periodos' in key or 'archivos' in key else False
-        st.rerun()
+    col1, col2 = st.columns([4, 1])
+    
+    with col2:
+        if st.button("🔄 Nuevo Análisis", type="secondary", use_container_width=True):
+            for key in ['archivos_procesados', 'periodos_asignados', 'mostrar_resultados']:
+                if key in st.session_state:
+                    st.session_state[key] = {} if 'periodos' in key or 'archivos' in key else False
+            st.rerun()
 
 # Mensaje inicial
 if not st.session_state.archivos_procesados and not st.session_state.mostrar_resultados:
-    st.info("👈 Comienza cargando archivos de ventas y compras")
+    st.info("👈 Comienza cargando archivos de ventas y compras. Para cada archivo, confirma el año-mes correspondiente.")
 
 # Pie de página
 st.markdown("---")
