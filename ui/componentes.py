@@ -54,48 +54,110 @@ def crear_uploader_columnas(tipo, max_archivos=3):
     
     return archivos
 
-def solicitar_confirmacion_periodo(año_pred, mes_pred, tipo, numero, archivo_nombre):
-    """Solicita confirmación del año-mes al usuario."""
-    st.write("---")
-    st.write("**📝 CONFIRMAR AÑO-MES DEL ARCHIVO:**")
-    
-    col_año, col_mes = st.columns(2)
-    
-    with col_año:
-        años_disponibles = list(range(2020, datetime.now().year + 2))
-        año_default = año_pred if año_pred and año_pred in años_disponibles else datetime.now().year
-        año_index = años_disponibles.index(año_default) if año_default in años_disponibles else len(años_disponibles)-1
-        año_seleccionado = st.selectbox(
-            f"Año para {tipo} {numero}:",
-            años_disponibles,
-            index=año_index,
-            key=f"año_{tipo}_{numero}_{archivo_nombre}"
-        )
-    
-    with col_mes:
-        meses = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-        ]
-        mes_default = mes_pred - 1 if mes_pred else 0
-        mes_seleccionado = st.selectbox(
-            f"Mes para {tipo} {numero}:",
-            meses,
-            index=mes_default,
-            key=f"mes_{tipo}_{numero}_{archivo_nombre}"
-        )
-    
-    return año_seleccionado, meses.index(mes_seleccionado) + 1
+def mostrar_resumen_compacto(info_archivo, numero, tipo, archivo_nombre):
+    """Muestra resumen COMPACTO de un archivo procesado (HORIZONTAL)."""
+    # Crear un contenedor con borde
+    with st.container():
+        st.markdown(f"---")
+        
+        # PRIMERA LÍNEA: Información básica
+        col1, col2, col3 = st.columns([2, 2, 1])
+        
+        with col1:
+            st.markdown(f"**📄 {tipo} {numero}:** `{archivo_nombre[:30]}{'...' if len(archivo_nombre) > 30 else ''}`")
+            st.markdown(f"📊 **{info_archivo['documentos_count']} documentos**")
+        
+        with col2:
+            fecha_min = info_archivo['fecha_minima'].strftime('%d/%m')
+            fecha_max = info_archivo['fecha_maxima'].strftime('%d/%m/%Y')
+            st.markdown(f"📅 **Rango:** {fecha_min} - {fecha_max}")
+            
+            # Detección de período predominante
+            if info_archivo['año_predominante']:
+                porcentaje = (info_archivo['cantidad_predominante'] / info_archivo['documentos_count']) * 100
+                st.markdown(f"🔍 **{info_archivo['año_predominante']}-{info_archivo['mes_predominante']:02d}** ({porcentaje:.0f}%)")
+        
+        with col3:
+            st.markdown(f"💰 **Total:**")
+            st.markdown(f"**{formatear_monto(info_archivo['total_monto'])}**")
+        
+        return info_archivo['año_predominante'], info_archivo['mes_predominante']
 
-def mostrar_resumen_archivo(info_archivo, numero, tipo):
-    """Muestra resumen de un archivo procesado."""
-    porcentaje = (info_archivo['cantidad_predominante'] / info_archivo['documentos_count']) * 100
+def solicitar_confirmacion_periodo_compacto(año_pred, mes_pred, tipo, numero, archivo_nombre):
+    """Solicita confirmación del año-mes en formato COMPACTO."""
+    # SEGUNDA LÍNEA: Confirmación de período
+    with st.container():
+        st.markdown("**📝 Confirmar período:**")
+        
+        # Crear columnas más ajustadas
+        col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+        
+        with col1:
+            st.markdown("Año:")
+        
+        with col2:
+            años_disponibles = list(range(2020, datetime.now().year + 2))
+            año_default = año_pred if año_pred and año_pred in años_disponibles else datetime.now().year
+            año_index = años_disponibles.index(año_default) if año_default in años_disponibles else len(años_disponibles)-1
+            año_seleccionado = st.selectbox(
+                "Año",
+                años_disponibles,
+                index=año_index,
+                key=f"año_compacto_{tipo}_{numero}_{archivo_nombre}",
+                label_visibility="collapsed"
+            )
+        
+        with col3:
+            meses = [
+                "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+            ]
+            mes_default = mes_pred - 1 if mes_pred else 0
+            mes_seleccionado = st.selectbox(
+                "Mes",
+                meses,
+                index=mes_default,
+                key=f"mes_compacto_{tipo}_{numero}_{archivo_nombre}",
+                label_visibility="collapsed"
+            )
+        
+        with col4:
+            mes_numero = meses.index(mes_seleccionado) + 1
+            st.success(f"✅ **{año_seleccionado}-{mes_numero:02d}**")
+        
+        return año_seleccionado, mes_numero
+
+def procesar_archivo_compacto(archivo, tipo, numero):
+    """Procesa y muestra un archivo en formato compacto."""
+    from core import ProcesadorArchivos
     
-    st.success(f"✅ {tipo} {numero} procesado: {info_archivo['documentos_count']} documentos")
-    st.write(f"**📅 Rango de fechas:** {info_archivo['fecha_minima'].strftime('%d/%m/%Y')} - {info_archivo['fecha_maxima'].strftime('%d/%m/%Y')}")
-    st.write(f"**💰 Total archivo:** {formatear_monto(info_archivo['total_monto'])}")
-    
-    if info_archivo['año_predominante']:
-        st.info(f"**🔍 DETECTADO:** {info_archivo['cantidad_predominante']} de {info_archivo['documentos_count']} documentos ({porcentaje:.0f}%) corresponden a **{info_archivo['año_predominante']}-{info_archivo['mes_predominante']:02d}**")
-    
-    return info_archivo['año_predominante'], info_archivo['mes_predominante']
+    try:
+        # Procesar archivo
+        info_archivo = ProcesadorArchivos.procesar_archivo(archivo, tipo.lower())
+        
+        # Mostrar resumen compacto
+        año_pred, mes_pred = mostrar_resumen_compacto(info_archivo, numero, tipo, archivo.name)
+        
+        # Solicitar confirmación compacta
+        año_confirmado, mes_confirmado = solicitar_confirmacion_periodo_compacto(
+            año_pred, mes_pred, tipo, numero, archivo.name
+        )
+        
+        return {
+            'info_archivo': info_archivo,
+            'año_confirmado': año_confirmado,
+            'mes_confirmado': mes_confirmado,
+            'success': True
+        }
+        
+    except Exception as e:
+        # Mostrar error compacto
+        with st.container():
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.error(f"❌ **{tipo} {numero} - {archivo.name}:** {str(e)[:50]}...")
+            with col2:
+                with st.expander("Ver detalles"):
+                    st.exception(e)
+        
+        return {'success': False, 'error': str(e)}
