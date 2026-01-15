@@ -1,4 +1,4 @@
-# app.py - VERSIÓN REFACTORIZADA (usa core/)
+# app.py - VERSIÓN CON CONFIRMACIÓN DE PERÍODOS
 import streamlit as st
 from datetime import datetime
 import pandas as pd
@@ -81,9 +81,9 @@ def mostrar_archivo_compacto(info_archivo, idx, tipo):
         return info_archivo['año_predominante'], info_archivo['mes_predominante']
 
 def solicitar_periodo(año_pred, mes_pred, idx, nombre_archivo, tipo):
-    """Solicita confirmación del año-mes."""
+    """Solicita confirmación del año-mes con botón de confirmación."""
     with st.container():
-        col_a, col_b, col_c, col_d = st.columns([1, 2, 2, 1])
+        col_a, col_b, col_c, col_d, col_e = st.columns([1, 2, 2, 2, 1])
         
         with col_a:
             st.markdown("**Período:**")
@@ -116,13 +116,32 @@ def solicitar_periodo(año_pred, mes_pred, idx, nombre_archivo, tipo):
         
         with col_d:
             mes_numero = meses.index(mes_seleccionado) + 1
-            st.success(f"**{año_seleccionado}-{mes_numero:02d}**")
+            periodo_texto = f"**{año_seleccionado}-{mes_numero:02d}**"
+            st.markdown(periodo_texto)
         
-        return año_seleccionado, mes_numero
+        with col_e:
+            # Estado para saber si ya se confirmó este archivo
+            estado_key = f"confirmado_{tipo}_{idx}_{nombre_archivo}"
+            if estado_key not in st.session_state:
+                st.session_state[estado_key] = False
+            
+            if st.session_state[estado_key]:
+                st.success("✅")
+                return año_seleccionado, mes_numero, True
+            else:
+                if st.button("✓", key=f"btn_{tipo}_{idx}_{nombre_archivo}", 
+                           help="Confirmar período", type="secondary"):
+                    st.session_state[estado_key] = True
+                    st.rerun()
+                return año_seleccionado, mes_numero, False
 
 def vista_carga():
     """Vista para cargar archivos."""
     st.subheader("📥 Carga de Archivos")
+    
+    # Contadores para mostrar advertencias
+    archivos_pendientes_ventas = 0
+    archivos_pendientes_compras = 0
     
     # Ventas
     archivos_ventas = crear_uploader_multiple("Ventas")
@@ -136,10 +155,16 @@ def vista_carga():
             try:
                 info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "venta")
                 año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Venta")
-                año_confirmado, mes_confirmado = solicitar_periodo(año_pred, mes_pred, idx, archivo.name, "venta")
+                año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
+                    año_pred, mes_pred, idx, archivo.name, "venta"
+                )
                 
-                st.session_state.archivos_procesados[archivo.name] = info_archivo
-                st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                if confirmado:
+                    st.session_state.archivos_procesados[archivo.name] = info_archivo
+                    st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                    st.success(f"✅ Período {año_confirmado}-{mes_confirmado:02d} confirmado")
+                else:
+                    archivos_pendientes_ventas += 1
                 
             except Exception as e:
                 st.error(f"❌ **Venta {idx+1} - {archivo.name}:** {str(e)[:50]}")
@@ -156,13 +181,29 @@ def vista_carga():
             try:
                 info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "compra")
                 año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Compra")
-                año_confirmado, mes_confirmado = solicitar_periodo(año_pred, mes_pred, idx, archivo.name, "compra")
+                año_confirmado, mes_confirmado, confirmado = solicitar_periodo(
+                    año_pred, mes_pred, idx, archivo.name, "compra"
+                )
                 
-                st.session_state.archivos_procesados[archivo.name] = info_archivo
-                st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                if confirmado:
+                    st.session_state.archivos_procesados[archivo.name] = info_archivo
+                    st.session_state.periodos_asignados[archivo.name] = f"{año_confirmado}-{mes_confirmado:02d}"
+                    st.success(f"✅ Período {año_confirmado}-{mes_confirmado:02d} confirmado")
+                else:
+                    archivos_pendientes_compras += 1
                 
             except Exception as e:
                 st.error(f"❌ **Compra {idx+1} - {archivo.name}:** {str(e)[:50]}")
+    
+    # Mostrar advertencias si hay archivos pendientes
+    if archivos_pendientes_ventas > 0 or archivos_pendientes_compras > 0:
+        st.warning(f"""
+        ⚠️ **Archivos pendientes de confirmación:**
+        - Ventas: {archivos_pendientes_ventas} archivo(s)
+        - Compras: {archivos_pendientes_compras} archivo(s)
+        
+        **Para continuar:** Haz clic en ✓ en cada archivo para confirmar el período.
+        """)
 
 def vista_resumen():
     """Vista de resumen."""
@@ -300,7 +341,7 @@ if st.session_state.archivos_procesados:
         
         with col1:
             total_archivos = len(st.session_state.archivos_procesados)
-            st.success(f"✅ **{total_archivos} archivo(s) listo(s) para análisis**")
+            st.success(f"✅ **{total_archivos} archivo(s) confirmado(s) y listo(s) para análisis**")
         
         with col2:
             if st.button("🚀 Calcular Análisis", type="primary", use_container_width=True):
@@ -316,12 +357,19 @@ if st.session_state.mostrar_resultados:
 # BOTÓN DE REINICIO
 # ==========================================
 
-if st.session_state.archivos_procesados:
+if st.session_state.archivos_procesados or any(k.startswith('confirmado_') for k in st.session_state.keys()):
     st.markdown("---")
     if st.button("🔄 Nuevo Análisis", type="secondary", use_container_width=True):
+        # Limpiar estados de confirmación
+        keys_a_eliminar = [k for k in st.session_state.keys() if k.startswith('confirmado_')]
+        for key in keys_a_eliminar:
+            del st.session_state[key]
+        
+        # Limpiar los otros estados
         for key in ['archivos_procesados', 'periodos_asignados', 'mostrar_resultados']:
             if key in st.session_state:
                 st.session_state[key] = {} if 'periodos' in key or 'archivos' in key else False
+        
         st.rerun()
 
 # Pie de página
