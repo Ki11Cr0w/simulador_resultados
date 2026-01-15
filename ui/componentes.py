@@ -42,12 +42,17 @@ def crear_uploader_multiple(tipo):
     st.markdown(f"### 📋 Archivos de {tipo}")
     
     archivos = st.file_uploader(
-        f"Selecciona uno o más archivos de {tipo.lower()}",
+        f"Selecciona UNO o VARIOS archivos de {tipo.lower()}",
         type=["xlsx", "xls", "csv"],
         accept_multiple_files=True,
         key=f"{tipo.lower()}_uploader_multiple",
-        help=f"Puedes seleccionar varios archivos de {tipo.lower()} a la vez. Máximo recomendado: 10 archivos."
+        help=f"📌 Puedes seleccionar MÚLTIPLES archivos a la vez. No hay límite (dentro de lo razonable).",
+        label_visibility="visible"
     )
+    
+    # Mostrar contador de archivos seleccionados
+    if archivos:
+        st.success(f"📦 **{len(archivos)} archivo(s) de {tipo.lower()} seleccionado(s)**")
     
     return archivos
 
