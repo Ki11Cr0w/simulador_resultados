@@ -1,19 +1,16 @@
-# app.py - VERSIÓN FINAL COMPACTA
+# app.py - VERSIÓN SIMPLIFICADA PARA PRUEBAS
 import streamlit as st
 from datetime import datetime
-
-# Importar vistas compactas
-from ui import vista_carga_archivos_compacta, vista_resumen_compacto, vista_resultados
 
 # ==========================================
 # CONFIGURACIÓN
 # ==========================================
 
-st.set_page_config(page_title="Simulador de Resultados", layout="wide")
+st.set_page_config(page_title="Simulador", layout="wide")
 st.title("📊 Simulador de Resultados")
 
 # ==========================================
-# ESTADO DE LA APLICACIÓN
+# ESTADO
 # ==========================================
 
 if 'archivos_procesados' not in st.session_state:
@@ -24,53 +21,53 @@ if 'mostrar_resultados' not in st.session_state:
     st.session_state.mostrar_resultados = False
 
 # ==========================================
-# FLUJO PRINCIPAL COMPACTO
+# FUNCIÓN TEMPORAL - Mientras arreglamos los imports
 # ==========================================
 
-# 1. Cargar archivos (formato compacto)
-vista_carga_archivos_compacta()
-
-# 2. Mostrar resumen compacto si hay archivos
-if st.session_state.archivos_procesados:
-    st.markdown("---")
+def vista_carga_simple():
+    """Vista simple mientras arreglamos imports."""
+    st.subheader("📥 Carga de Archivos")
     
-    if vista_resumen_compacto():
-        # Botón para calcular análisis
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown("**¿Listo para analizar los datos?**")
-        
-        with col2:
-            if st.button("🚀 Calcular Análisis", type="primary", use_container_width=True):
-                st.session_state.mostrar_resultados = True
-                st.rerun()
-
-# 3. Mostrar resultados si se solicitó
-if st.session_state.mostrar_resultados:
-    st.markdown("---")
-    vista_resultados()
-
-# ==========================================
-# BOTÓN DE REINICIO
-# ==========================================
-
-if st.session_state.archivos_procesados:
-    st.markdown("---")
+    # Uploaders básicos
+    col1, col2, col3 = st.columns(3)
     
-    col1, col2 = st.columns([4, 1])
+    with col1:
+        v1 = st.file_uploader("Ventas 1", type=["xlsx", "csv"])
     
     with col2:
-        if st.button("🔄 Nuevo Análisis", type="secondary", use_container_width=True):
-            for key in ['archivos_procesados', 'periodos_asignados', 'mostrar_resultados']:
-                if key in st.session_state:
-                    st.session_state[key] = {} if 'periodos' in key or 'archivos' in key else False
-            st.rerun()
+        v2 = st.file_uploader("Ventas 2", type=["xlsx", "csv"])
+    
+    with col3:
+        v3 = st.file_uploader("Ventas 3", type=["xlsx", "csv"])
+    
+    # Compras
+    st.markdown("### Compras")
+    col4, col5, col6 = st.columns(3)
+    
+    with col4:
+        c1 = st.file_uploader("Compras 1", type=["xlsx", "csv"])
+    
+    with col5:
+        c2 = st.file_uploader("Compras 2", type=["xlsx", "csv"])
+    
+    with col6:
+        c3 = st.file_uploader("Compras 3", type=["xlsx", "csv"])
 
-# Mensaje inicial
-if not st.session_state.archivos_procesados and not st.session_state.mostrar_resultados:
-    st.info("👈 Comienza cargando archivos de ventas y compras. Para cada archivo, confirma el año-mes correspondiente.")
+# ==========================================
+# FLUJO PRINCIPAL
+# ==========================================
+
+# Usar vista simple temporalmente
+vista_carga_simple()
+
+# Mostrar estado actual
+if st.session_state.archivos_procesados:
+    st.info(f"Archivos cargados: {len(st.session_state.archivos_procesados)}")
+
+# Botón de prueba
+if st.button("Probar"):
+    st.success("✅ App funcionando")
 
 # Pie de página
 st.markdown("---")
-st.caption(f"Simulador de Resultados | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+st.caption(f"Versión de prueba | {datetime.now().strftime('%d/%m/%Y')}")
