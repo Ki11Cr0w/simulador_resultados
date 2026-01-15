@@ -16,14 +16,9 @@ def vista_carga_multiple_archivos():
     # ==========================================
     # SECCIÓN VENTAS - MÚLTIPLES ARCHIVOS
     # ==========================================
-    st.markdown("---")
-    
-    # Uploader para múltiples archivos de ventas
     archivos_ventas = crear_uploader_multiple("Ventas")
     
     if archivos_ventas:
-        st.markdown(f"**📦 {len(archivos_ventas)} archivo(s) de ventas seleccionado(s)**")
-        
         # Procesar lote de ventas
         resultados_ventas = procesar_lote_archivos(archivos_ventas, "Venta")
         
@@ -41,14 +36,9 @@ def vista_carga_multiple_archivos():
     # ==========================================
     # SECCIÓN COMPRAS - MÚLTIPLES ARCHIVOS
     # ==========================================
-    st.markdown("---")
-    
-    # Uploader para múltiples archivos de compras
     archivos_compras = crear_uploader_multiple("Compras")
     
     if archivos_compras:
-        st.markdown(f"**📦 {len(archivos_compras)} archivo(s) de compras seleccionado(s)**")
-        
         # Procesar lote de compras
         resultados_compras = procesar_lote_archivos(archivos_compras, "Compra")
         
@@ -179,13 +169,4 @@ def vista_resultados():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**📝 Notas de crédito (tipo 61):**")
-            st.write(f"- Ventas: {estadisticas['notas_credito_ventas']}")
-            st.write(f"- Compras: {estadisticas['notas_credito_compras']}")
-            st.write(f"- Total: {estadisticas['notas_credito_ventas'] + estadisticas['notas_credito_compras']}")
-        
-        with col2:
-            from core.utils import formatear_monto
-            st.write("**📊 Promedios:**")
-            st.write(f"- Venta promedio: {formatear_monto(estadisticas['promedio_venta'])}")
-            st.write(f"- Compra promedio: {formatear_monto(estadisticas['promedio_compra'])}")
+            st.write("**📝 Notas
