@@ -1,16 +1,24 @@
-# app.py - VERSIÓN SIMPLIFICADA PARA PRUEBAS
+# app.py - VERSIÓN CON CARGA MÚLTIPLE
 import streamlit as st
 from datetime import datetime
+
+# Importar vistas
+try:
+    from ui import vista_carga_multiple_archivos, vista_resumen_compacto, vista_resultados
+    UI_DISPONIBLE = True
+except ImportError as e:
+    st.error(f"❌ Error importando módulos UI: {str(e)}")
+    UI_DISPONIBLE = False
 
 # ==========================================
 # CONFIGURACIÓN
 # ==========================================
 
-st.set_page_config(page_title="Simulador", layout="wide")
+st.set_page_config(page_title="Simulador de Resultados", layout="wide")
 st.title("📊 Simulador de Resultados")
 
 # ==========================================
-# ESTADO
+# ESTADO DE LA APLICACIÓN
 # ==========================================
 
 if 'archivos_procesados' not in st.session_state:
@@ -21,53 +29,81 @@ if 'mostrar_resultados' not in st.session_state:
     st.session_state.mostrar_resultados = False
 
 # ==========================================
-# FUNCIÓN TEMPORAL - Mientras arreglamos los imports
-# ==========================================
-
-def vista_carga_simple():
-    """Vista simple mientras arreglamos imports."""
-    st.subheader("📥 Carga de Archivos")
-    
-    # Uploaders básicos
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        v1 = st.file_uploader("Ventas 1", type=["xlsx", "csv"])
-    
-    with col2:
-        v2 = st.file_uploader("Ventas 2", type=["xlsx", "csv"])
-    
-    with col3:
-        v3 = st.file_uploader("Ventas 3", type=["xlsx", "csv"])
-    
-    # Compras
-    st.markdown("### Compras")
-    col4, col5, col6 = st.columns(3)
-    
-    with col4:
-        c1 = st.file_uploader("Compras 1", type=["xlsx", "csv"])
-    
-    with col5:
-        c2 = st.file_uploader("Compras 2", type=["xlsx", "csv"])
-    
-    with col6:
-        c3 = st.file_uploader("Compras 3", type=["xlsx", "csv"])
-
-# ==========================================
 # FLUJO PRINCIPAL
 # ==========================================
 
-# Usar vista simple temporalmente
-vista_carga_simple()
+if not UI_DISPONIBLE:
+    st.error("""
+    ⚠️ **Error de configuración**
+    
+    Faltan los módulos de interfaz. Por favor asegúrate de que:
+    1. Existe la carpeta `ui/`
+    2. Dentro tiene: `__init__.py`, `componentes.py`, `vistas.py`
+    3. Los archivos tienen el código correcto
+    """)
+    st.stop()
 
-# Mostrar estado actual
+# 1. Cargar múltiples archivos
+vista_carga_multiple_archivos()
+
+# 2. Mostrar resumen si hay archivos
 if st.session_state.archivos_procesados:
-    st.info(f"Archivos cargados: {len(st.session_state.archivos_procesados)}")
+    st.markdown("---")
+    
+    if vista_resumen_compacto():
+        # Botón para calcular análisis
+        st.markdown("---")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            total_archivos = len(st.session_state.archivos_procesados)
+            st.success(f"✅ **{total_archivos} archivo(s) listo(s) para análisis**")
+        
+        with col2:
+            if st.button("📊 Ver Resumen", type="secondary", use_container_width=True):
+                st.info("Mostrando resumen actual")
+        
+        with col3:
+            if st.button("🚀 Calcular Análisis", type="primary", use_container_width=True):
+                st.session_state.mostrar_resultados = True
+                st.rerun()
 
-# Botón de prueba
-if st.button("Probar"):
-    st.success("✅ App funcionando")
+# 3. Mostrar resultados si se solicitó
+if st.session_state.mostrar_resultados:
+    st.markdown("---")
+    vista_resultados()
+
+# ==========================================
+# BOTÓN DE REINICIO
+# ==========================================
+
+if st.session_state.archivos_procesados:
+    st.markdown("---")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown("**¿Deseas realizar otro análisis?**")
+    
+    with col2:
+        if st.button("🔄 Nuevo Análisis", type="secondary", use_container_width=True):
+            # Limpiar estado
+            for key in ['archivos_procesados', 'periodos_asignados', 'mostrar_resultados']:
+                if key in st.session_state:
+                    st.session_state[key] = {} if 'periodos' in key or 'archivos' in key else False
+            st.rerun()
+
+# Mensaje inicial
+if not st.session_state.archivos_procesados and not st.session_state.mostrar_resultados:
+    st.info("""
+    👈 **Instrucciones:**
+    
+    1. **Ventas:** Selecciona uno o varios archivos de ventas
+    2. **Compras:** Selecciona uno o varios archivos de compras  
+    3. **Confirma** el período (año-mes) para cada archivo
+    4. **Calcula** el análisis cuando todos estén listos
+    """)
 
 # Pie de página
 st.markdown("---")
-st.caption(f"Versión de prueba | {datetime.now().strftime('%d/%m/%Y')}")
+st.caption(f"Simulador de Resultados | Carga múltiple | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
