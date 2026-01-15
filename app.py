@@ -1,14 +1,11 @@
-# app.py - VERSIÓN MODULAR CORTA
+# app.py - VERSIÓN REFACTORIZADA (usa core/)
 import streamlit as st
 from datetime import datetime
 import pandas as pd
 from collections import defaultdict
 
-# Importar funciones desde funciones.py
-from funciones import (
-    procesar_archivo, formatear_monto, agrupar_por_periodo,
-    calcular_totales, generar_dataframe_resultados, calcular_estadisticas
-)
+# Importar desde core (paquete modular)
+from core import ProcesadorArchivos, CalculadoraResultados, formatear_monto
 
 # ==========================================
 # CONFIGURACIÓN
@@ -137,7 +134,7 @@ def vista_carga():
                 continue
             
             try:
-                info_archivo = procesar_archivo(archivo, "venta")
+                info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "venta")
                 año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Venta")
                 año_confirmado, mes_confirmado = solicitar_periodo(año_pred, mes_pred, idx, archivo.name, "venta")
                 
@@ -157,7 +154,7 @@ def vista_carga():
                 continue
             
             try:
-                info_archivo = procesar_archivo(archivo, "compra")
+                info_archivo = ProcesadorArchivos.procesar_archivo(archivo, "compra")
                 año_pred, mes_pred = mostrar_archivo_compacto(info_archivo, idx, "Compra")
                 año_confirmado, mes_confirmado = solicitar_periodo(año_pred, mes_pred, idx, archivo.name, "compra")
                 
@@ -234,7 +231,7 @@ def vista_resumen():
     return True
 
 def vista_resultados():
-    """Vista de resultados."""
+    """Vista de resultados usando CalculadoraResultados."""
     if not st.session_state.mostrar_resultados:
         return
     
@@ -246,11 +243,11 @@ def vista_resultados():
             doc['periodo_asignado'] = periodo
             todos_documentos.append(doc)
     
-    # Calcular
-    resumen_periodos = agrupar_por_periodo(todos_documentos, st.session_state.periodos_asignados)
-    totales = calcular_totales(resumen_periodos)
-    datos_tabla = generar_dataframe_resultados(resumen_periodos)
-    estadisticas = calcular_estadisticas(todos_documentos)
+    # Calcular usando CalculadoraResultados desde core
+    resumen_periodos = CalculadoraResultados.agrupar_por_periodo(todos_documentos, st.session_state.periodos_asignados)
+    totales = CalculadoraResultados.calcular_totales(resumen_periodos)
+    datos_tabla = CalculadoraResultados.generar_dataframe_resultados(resumen_periodos)
+    estadisticas = CalculadoraResultados.calcular_estadisticas(todos_documentos)
     
     # Mostrar tabla
     st.subheader("📊 Análisis por Período")
